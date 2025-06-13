@@ -1,13 +1,17 @@
 import os
 import time
-import schedule
 import pandas as pd
 import pytz
 import holidays
 from alpaca.trading.client import TradingClient
 from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.trading.requests import MarketOrderRequest, LimitOrderRequest
-from alpaca.trading.enums import OrderSide, OrderType, TimeInForce
+from alpaca.data.requests import StockBarsRequest
+from alpaca.trading.requests import MarketOrderRequest
+from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+
+# Import our algorithm
+from algos.smaEmaCrossoverAlgo import SmaEmaCrossoverAlgo
 
 # Configuration
 API_KEY = os.getenv('ALPACA_KEY')
@@ -24,7 +28,10 @@ nyse = pytz.timezone('America/New_York')
 daily_pnl_threshold = 0.0025  # 0.25% daily loss limit
 daily_gain_target = 0.01       # 1% daily gain target
 
-# Track daily performance
+# Initialize the algorithm
+trading_algorithm = SmaEmaCrossoverAlgo(EMA_PERIOD, SMA_PERIOD)
+
+# Track daily performance - initialized at script start
 initial_equity = None
 trading_active = True
 
@@ -61,10 +68,13 @@ def exit_all_positions():
     trading_client.close_all_positions(cancel_orders=True)
     print("Closed all positions")
 
-def work():
-    global trading_active
-    if not trading_active or not market_is_open():
-        return
+def run_trading_cycle():
+    global trading_active, trading_client, stock_historical_client
+    
+    # Skip if market is closed
+    if not market_is_open():
+        print("Market is closed. Exiting.")
+        return False
 
     try:
         # Check daily P&L limits
@@ -73,31 +83,31 @@ def work():
             print(f"Daily P&L limit reached: {pnl*100:.2f}%")
             exit_all_positions()
             trading_active = False
-            return
+            return False
 
         # Get historical data (last 50 bars)
-        bars = stock_historical_client.get_stock_bars(
-            SYMBOL, 
-            timeframe="5Min", 
+        stock_bars_request = StockBarsRequest(
+            symbol_or_symbols=SYMBOL,
+            timeframe=TimeFrame(5, TimeFrameUnit.Minute),
             limit=50
-        ).df
+        )
+        bars = stock_historical_client.get_stock_bars(stock_bars_request).df
         
-        # Calculate indicators
-        bars['ema'] = bars.close.ewm(span=EMA_PERIOD, adjust=False).mean()
-        bars['sma'] = bars.close.rolling(SMA_PERIOD).mean()
+        # Verify data exists
+        if bars.empty:
+            print("No historical data available")
+            return True
         
         # Get current position
         positions = get_positions()
         current_position = positions.get(SYMBOL, 0)
-
-        # Generate signals
-        last_close = bars.close[-1]
-        ema_current = bars.ema[-1]
-        sma_current = bars.sma[-1]
         
-        # Buy signal: EMA crosses above SMA
-        if ema_current > sma_current and current_position == 0:
-            print(f"BUY signal at {last_close}")
+        # Process data with our algorithm
+        signal_data = trading_algorithm.analyze(bars)
+        
+        # Act on signals
+        if signal_data['signal'] == "BUY" and current_position == 0:
+            print(f"BUY signal at {signal_data['price']}")
             trading_client.submit_order(
                 MarketOrderRequest(
                     symbol=SYMBOL,
@@ -107,9 +117,8 @@ def work():
                 )
             )
         
-        # Sell signal: EMA crosses below SMA
-        elif ema_current < sma_current and current_position > 0:
-            print(f"SELL signal at {last_close}")
+        elif signal_data['signal'] == "SELL" and current_position > 0:
+            print(f"SELL signal at {signal_data['price']}")
             trading_client.submit_order(
                 MarketOrderRequest(
                     symbol=SYMBOL,
@@ -119,20 +128,40 @@ def work():
                 )
             )
 
+        return True  # Continue trading
+
+    except OSError as e:
+        if e.errno == 9:  # Bad file descriptor
+            print("Recreating Alpaca clients due to connection error...")
+            trading_client = TradingClient(API_KEY, API_SECRET, paper=True)
+            stock_historical_client = StockHistoricalDataClient(API_KEY, API_SECRET)
+            return True  # Try again after recreating clients
+        else:
+            print(f"Error in trading cycle: {str(e)}")
+            return False
     except Exception as e:
-        print(f"Error in work cycle: {str(e)}")
-
-def reset_daily():
-    """Reset daily tracking at market close"""
-    global initial_equity, trading_active
-    initial_equity = None
-    trading_active = True
-
-# Schedule daily reset
-schedule.every().day.at("09:30", "America/New_York").do(reset_daily)
-schedule.every(CHECK_INTERVAL).seconds.do(work)
+        print(f"Error in trading cycle: {str(e)}")
+        return False
 
 if __name__ == "__main__":
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    print(f"Bot starting at {pd.Timestamp.now(tz=nyse)}")
+    
+    # Run once upon starting (when cron starts it at 9:30 AM)
+    # Set initial equity
+    account = trading_client.get_account()
+    initial_equity = float(account.equity)
+    print(f"Initial equity: ${initial_equity:.2f}")
+    
+    # Monitor market and trade until market closes
+    while market_is_open() and trading_active:
+        if not run_trading_cycle():
+            break
+        time.sleep(CHECK_INTERVAL)
+    
+    # Clean up at end of day
+    if trading_active:  # If we haven't already exited positions due to P&L limits
+        exit_all_positions()
+    
+    print(f"Trading day complete at {pd.Timestamp.now(tz=nyse)}")
+    final_pnl = calculate_pnl()
+    print(f"Daily P&L: {final_pnl*100:.2f}%")
