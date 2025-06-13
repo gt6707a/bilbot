@@ -1,0 +1,6 @@
+alpaca-py
+pandas
+schedule
+python-dateutil
+pytz
+holidays
