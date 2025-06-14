@@ -3,15 +3,10 @@ import time
 import pandas as pd
 import pytz
 import holidays
-from alpaca.trading.client import TradingClient
-from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockBarsRequest
-from alpaca.trading.requests import MarketOrderRequest
-from alpaca.trading.enums import OrderSide, TimeInForce
-from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+from datetime import datetime
 
 # Import our algorithm
-from algos.smaEmaCrossoverAlgo import SmaEmaCrossoverAlgo
+from algos.smaEmaCrossoverAlgorithm import SmaEmaCrossoverAlgorithm
 
 # Configuration
 API_KEY = os.getenv('ALPACA_KEY')
@@ -21,19 +16,19 @@ SYMBOL = "SPY"  # Low-cost, liquid ETF
 EMA_PERIOD = 9   # Fast EMA
 SMA_PERIOD = 21  # Slow SMA
 
-trading_client = TradingClient(API_KEY, API_SECRET, paper=True)
-stock_historical_client = StockHistoricalDataClient(API_KEY, API_SECRET)
-
 nyse = pytz.timezone('America/New_York')
-daily_pnl_threshold = 0.0025  # 0.25% daily loss limit
-daily_gain_target = 0.01       # 1% daily gain target
 
-# Initialize the algorithm
-trading_algorithm = SmaEmaCrossoverAlgo(EMA_PERIOD, SMA_PERIOD)
-
-# Track daily performance - initialized at script start
-initial_equity = None
-trading_active = True
+# Initialize the algorithm with all required parameters
+trading_algorithm = SmaEmaCrossoverAlgorithm(
+    api_key=API_KEY,
+    api_secret=API_SECRET,
+    symbol=SYMBOL,
+    ema_period=EMA_PERIOD,
+    sma_period=SMA_PERIOD,
+    interval_minutes=5,  # Recalculate signal every 5 minutes
+    position_size=1,     # Trade 1 share at a time
+    paper=True           # Use paper trading
+)
 
 def market_is_open():
     """Check if market is open using NYSE hours and holidays"""
@@ -46,122 +41,49 @@ def market_is_open():
     market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
     return market_open <= now <= market_close
 
-def calculate_pnl():
-    """Calculate daily P&L percentage"""
-    global initial_equity
-    account = trading_client.get_account()
-    current_equity = float(account.equity)
-    
-    # Set initial equity at market open
-    if initial_equity is None:
-        initial_equity = current_equity
-        return 0.0
-        
-    return (current_equity - initial_equity) / initial_equity
-
-def get_positions():
-    """Get current positions as {symbol: qty}"""
-    return {p.symbol: float(p.qty) for p in trading_client.get_all_positions()}
-
-def exit_all_positions():
-    """Liquidate all positions"""
-    trading_client.close_all_positions(cancel_orders=True)
-    print("Closed all positions")
-
-def run_trading_cycle():
-    global trading_active, trading_client, stock_historical_client
-    
-    # Skip if market is closed
-    if not market_is_open():
-        print("Market is closed. Exiting.")
-        return False
-
-    try:
-        # Check daily P&L limits
-        pnl = calculate_pnl()
-        if pnl <= -daily_pnl_threshold or pnl >= daily_gain_target:
-            print(f"Daily P&L limit reached: {pnl*100:.2f}%")
-            exit_all_positions()
-            trading_active = False
-            return False
-
-        # Get historical data (last 50 bars)
-        stock_bars_request = StockBarsRequest(
-            symbol_or_symbols=SYMBOL,
-            timeframe=TimeFrame(5, TimeFrameUnit.Minute),
-            limit=50
-        )
-        bars = stock_historical_client.get_stock_bars(stock_bars_request).df
-        
-        # Verify data exists
-        if bars.empty:
-            print("No historical data available")
-            return True
-        
-        # Get current position
-        positions = get_positions()
-        current_position = positions.get(SYMBOL, 0)
-        
-        # Process data with our algorithm
-        signal_data = trading_algorithm.analyze(bars)
-        
-        # Act on signals
-        if signal_data['signal'] == "BUY" and current_position == 0:
-            print(f"BUY signal at {signal_data['price']}")
-            trading_client.submit_order(
-                MarketOrderRequest(
-                    symbol=SYMBOL,
-                    qty=1,  # Adjust based on account size
-                    side=OrderSide.BUY,
-                    time_in_force=TimeInForce.DAY
-                )
-            )
-        
-        elif signal_data['signal'] == "SELL" and current_position > 0:
-            print(f"SELL signal at {signal_data['price']}")
-            trading_client.submit_order(
-                MarketOrderRequest(
-                    symbol=SYMBOL,
-                    qty=current_position,
-                    side=OrderSide.SELL,
-                    time_in_force=TimeInForce.DAY
-                )
-            )
-
-        return True  # Continue trading
-
-    except OSError as e:
-        if e.errno == 9:  # Bad file descriptor
-            print("Recreating Alpaca clients due to connection error...")
-            trading_client = TradingClient(API_KEY, API_SECRET, paper=True)
-            stock_historical_client = StockHistoricalDataClient(API_KEY, API_SECRET)
-            return True  # Try again after recreating clients
-        else:
-            print(f"Error in trading cycle: {str(e)}")
-            return False
-    except Exception as e:
-        print(f"Error in trading cycle: {str(e)}")
-        return False
-
 if __name__ == "__main__":
     print(f"Bot starting at {pd.Timestamp.now(tz=nyse)}")
     
-    # Run once upon starting (when cron starts it at 9:30 AM)
     # Set initial equity
-    account = trading_client.get_account()
-    initial_equity = float(account.equity)
-    print(f"Initial equity: ${initial_equity:.2f}")
+    trading_algorithm.initialize_equity()
+    print(f"Initial equity: ${trading_algorithm.get_current_equity():.2f}")
     
-    # Monitor market and trade until market closes
-    while market_is_open() and trading_active:
-        if not run_trading_cycle():
+    trading_active = True
+    
+    # Monitor market and trade until market closes or limits reached
+    while trading_active:
+        # Check if market is open - bot's responsibility
+        if not market_is_open():
+            print(f"Market is closed at {datetime.now(tz=nyse)}")
+            print("Market is closed. Terminating the process.")
+            # Exit all positions as a safety measure before terminating
+            trading_algorithm.exit_all_positions()
+            # Break out of the loop which will end the program
             break
+            
+        # Check risk limits - bot's responsibility
+        pnl = trading_algorithm.calculate_pnl()
+        if pnl <= -trading_algorithm.daily_pnl_threshold or pnl >= trading_algorithm.daily_gain_target:
+            print(f"Daily P&L limit reached: {pnl*100:.2f}%")
+            trading_algorithm.exit_all_positions()
+            trading_active = False
+            break
+        
+        # Let the algorithm run its trading logic
+        try:
+            trading_algorithm.run()
+        except Exception as e:
+            print(f"Error in trading cycle: {str(e)}")
+            # Handle reconnection if needed
+            if isinstance(e, OSError) and getattr(e, 'errno', None) == 9:  # Bad file descriptor
+                print("Recreating Alpaca clients due to connection error...")
+                trading_algorithm.reconnect()
+        
         time.sleep(CHECK_INTERVAL)
     
     # Clean up at end of day
-    if trading_active:  # If we haven't already exited positions due to P&L limits
-        exit_all_positions()
+    trading_algorithm.exit_all_positions()
     
     print(f"Trading day complete at {pd.Timestamp.now(tz=nyse)}")
-    final_pnl = calculate_pnl()
+    final_pnl = trading_algorithm.calculate_pnl()
     print(f"Daily P&L: {final_pnl*100:.2f}%")
