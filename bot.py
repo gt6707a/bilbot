@@ -9,8 +9,6 @@ from datetime import datetime
 from algos.smaEmaCrossoverAlgorithm import SmaEmaCrossoverAlgorithm
 
 # Configuration
-API_KEY = os.getenv('ALPACA_KEY')
-API_SECRET = os.getenv('ALPACA_SECRET')
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 60))  # Seconds
 SYMBOL = "SPY"  # Low-cost, liquid ETF
 EMA_PERIOD = 9   # Fast EMA
@@ -18,10 +16,8 @@ SMA_PERIOD = 21  # Slow SMA
 
 nyse = pytz.timezone('America/New_York')
 
-# Initialize the algorithm with all required parameters
+# Initialize the algorithm with required parameters (no API credentials)
 trading_algorithm = SmaEmaCrossoverAlgorithm(
-    api_key=API_KEY,
-    api_secret=API_SECRET,
     symbol=SYMBOL,
     ema_period=EMA_PERIOD,
     sma_period=SMA_PERIOD,
@@ -43,10 +39,6 @@ def market_is_open():
 
 if __name__ == "__main__":
     print(f"Bot starting at {pd.Timestamp.now(tz=nyse)}")
-    
-    # Set initial equity
-    trading_algorithm.initialize_equity()
-    print(f"Initial equity: ${trading_algorithm.get_current_equity():.2f}")
     
     trading_active = True
     

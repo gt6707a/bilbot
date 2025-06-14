@@ -1,4 +1,4 @@
-import time
+import os
 import pandas as pd
 from datetime import datetime, timedelta
 from alpaca.trading.client import TradingClient
@@ -16,13 +16,11 @@ class SmaEmaCrossoverAlgorithm:
     Sell signal: When fast EMA crosses below slow SMA
     """
     
-    def __init__(self, api_key, api_secret, symbol, ema_period=9, sma_period=21, 
+    def __init__(self, symbol, ema_period=9, sma_period=21, 
                  interval_minutes=5, position_size=1, paper=True):
         """
         Initialize the SMA/EMA crossover algorithm with trading capabilities.
         
-        :param api_key: Alpaca API key
-        :param api_secret: Alpaca API secret
         :param symbol: The trading symbol (e.g., 'SPY')
         :param ema_period: Period for EMA calculation (e.g., 9)
         :param sma_period: Period for SMA calculation (e.g., 21)
@@ -30,18 +28,23 @@ class SmaEmaCrossoverAlgorithm:
         :param position_size: Number of shares to trade
         :param paper: Whether to use paper trading
         """
+        # Get API credentials from environment variables
+        self.api_key = os.getenv('ALPACA_KEY')
+        self.api_secret = os.getenv('ALPACA_SECRET')
+        
+        if not self.api_key or not self.api_secret:
+            raise ValueError("ALPACA_KEY and ALPACA_SECRET environment variables must be set")
+        
         self.symbol = symbol
         self.ema_period = ema_period
         self.sma_period = sma_period
         self.interval_minutes = interval_minutes
         self.position_size = position_size
-        self.api_key = api_key
-        self.api_secret = api_secret
         self.paper = paper
         
         # Initialize Alpaca clients
-        self.data_client = StockHistoricalDataClient(api_key, api_secret)
-        self.trading_client = TradingClient(api_key, api_secret, paper=paper)
+        self.data_client = StockHistoricalDataClient(self.api_key, self.api_secret)
+        self.trading_client = TradingClient(self.api_key, self.api_secret, paper=paper)
         
         # Track when we last calculated a signal
         self.last_calculation_time = None
@@ -75,7 +78,7 @@ class SmaEmaCrossoverAlgorithm:
         request_params = StockBarsRequest(
             symbol_or_symbols=self.symbol,
             timeframe=TimeFrame.Minute,
-            start=pd.Timestamp.now() - pd.Timedelta(days=5),  # Look back 5 days to get enough data
+            start=pd.Timestamp.now() - pd.Timedelta(days=5),
             limit=lookback
         )
         
@@ -149,6 +152,7 @@ class SmaEmaCrossoverAlgorithm:
         """Set the initial equity value"""
         account = self.trading_client.get_account()
         self.initial_equity = float(account.equity)
+        print(f"Initial equity: ${self.initial_equity:.2f}")
     
     def get_current_equity(self):
         """Get current equity value"""
@@ -208,12 +212,15 @@ class SmaEmaCrossoverAlgorithm:
     
     def run(self):
         """Run one trading cycle"""
-        # Core algorithm functionality - get signal and execute trade
+        # Process data and get trading signal
         signal = self.get_signal()
+        
+        # Execute trade based on signal
         trade_executed = self.execute_trade(signal)
         
         return {
             'signal': signal['signal'],
             'price': signal['price'],
-            'trade_executed': trade_executed
+            'trade_executed': trade_executed,
+            'pnl': self.calculate_pnl() * 100  # Return as percentage
         }
