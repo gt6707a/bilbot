@@ -16,13 +16,13 @@ class SmaEmaCrossoverAlgorithm:
     Sell signal: When fast EMA crosses below slow SMA
     """
     
-    def __init__(self, symbol, interval_minutes=5, notional="1000", paper=True):
+    def __init__(self, symbol, interval_minutes=5, initial_equity=1000, paper=True):
         """
         Initialize the SMA/EMA crossover algorithm with trading capabilities.
         
         :param symbol: The trading symbol (e.g., 'SPY')
         :param interval_minutes: How often (in minutes) to recalculate the signal
-        :param notional: Dollar amount to trade per order.
+        :param initial_equity: Dollar amount to begin the day with.
         :param paper: Whether to use paper trading
         """
         # Get API credentials from environment variables
@@ -43,7 +43,8 @@ class SmaEmaCrossoverAlgorithm:
         
         self.symbol = symbol
         self.interval_minutes = interval_minutes
-        self.notional = notional
+        self.initial_equity = initial_equity
+        self.current_equity = initial_equity
         self.paper = paper
         
         # Initialize Alpaca clients
@@ -152,48 +153,55 @@ class SmaEmaCrossoverAlgorithm:
             # Return NONE signal in case of error
             return {"signal": "NONE", "price": None}
     
-    def initialize_equity(self):
-        """Set the initial equity value"""
-        account = self.trading_client.get_account()
-        self.initial_equity = float(account.equity)
-        print(f"Initial equity: ${self.initial_equity:.2f}")
-    
     def get_current_equity(self):
         """Get current equity value"""
-        account = self.trading_client.get_account()
-        return float(account.equity)
+        return float(self.current_equity)
     
     def calculate_pnl(self):
         """Calculate daily P&L percentage"""
-        current_equity = self.get_current_equity()
-        
-        # Set initial equity if not set
-        if self.initial_equity is None:
-            self.initial_equity = current_equity
-            return 0.0
-            
-        return (current_equity - self.initial_equity) / self.initial_equity
-    
-    def get_positions(self):
-        """Get current positions as {symbol: qty}"""
-        return {p.symbol: float(p.qty) for p in self.trading_client.get_all_positions()}
+        return (self.current_equity - self.initial_equity) / self.initial_equity
     
     def exit_all_positions(self):
         """Liquidate all positions"""
         self.trading_client.close_all_positions(cancel_orders=True)
         print("Closed all positions")
     
+    def get_open_position(self):
+        """
+        Get current open position for the symbol.
+        Returns position quantity or 0 if no position exists.
+        """
+        try:
+            position = self.trading_client.get_open_position(self.symbol)
+            return float(position.qty)
+        except Exception:
+            # No position exists
+            return 0
+
+    def close_position(self):
+        """
+        Close the position for the symbol.
+        Returns True if position was closed successfully.
+        """
+        try:
+            self.trading_client.close_position(self.symbol)
+            print(f"Closed position for {self.symbol}")
+            return True
+        except Exception as e:
+            print(f"Error closing position for {self.symbol}: {str(e)}")
+            return False
+    
     def execute_trade(self, signal):
         """Execute a trade based on the given signal"""
-        positions = self.get_positions()
-        current_position = positions.get(self.symbol, 0)
+        # Get current position using the new method
+        current_position = self.get_open_position()
         
         if signal['signal'] == "BUY" and current_position == 0:
             print(f"BUY signal at {signal['price']}")
             self.trading_client.submit_order(
                 MarketOrderRequest(
                     symbol=self.symbol,
-                    notional=self.notional,
+                    notional=self.current_equity,
                     side=OrderSide.BUY,
                     time_in_force=TimeInForce.DAY
                 )
@@ -202,15 +210,8 @@ class SmaEmaCrossoverAlgorithm:
         
         elif signal['signal'] == "SELL" and current_position > 0:
             print(f"SELL signal at {signal['price']}")
-            self.trading_client.submit_order(
-                MarketOrderRequest(
-                    symbol=self.symbol,
-                    notional=self.notional,
-                    side=OrderSide.SELL,
-                    time_in_force=TimeInForce.DAY
-                )
-            )
-            return True
+            # Use close_position instead of submitting a sell order
+            return self.close_position()
             
         return False
     
