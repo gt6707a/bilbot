@@ -16,14 +16,11 @@ class SmaEmaCrossoverAlgorithm:
     Sell signal: When fast EMA crosses below slow SMA
     """
     
-    def __init__(self, symbol, ema_period=9, sma_period=21, 
-                 interval_minutes=5, position_size=1, paper=True):
+    def __init__(self, symbol, interval_minutes=5, position_size=1, paper=True):
         """
         Initialize the SMA/EMA crossover algorithm with trading capabilities.
         
         :param symbol: The trading symbol (e.g., 'SPY')
-        :param ema_period: Period for EMA calculation (e.g., 9)
-        :param sma_period: Period for SMA calculation (e.g., 21)
         :param interval_minutes: How often (in minutes) to recalculate the signal
         :param position_size: Number of shares to trade
         :param paper: Whether to use paper trading
@@ -35,9 +32,16 @@ class SmaEmaCrossoverAlgorithm:
         if not self.api_key or not self.api_secret:
             raise ValueError("ALPACA_KEY and ALPACA_SECRET environment variables must be set")
         
+        # Indicator periods defined locally
+        # Define indicator period constants
+        FAST_EMA_PERIOD = 9
+        SLOW_SMA_PERIOD = 21
+        
+        # Assign to instance variables for use throughout the class
+        self.ema_period = FAST_EMA_PERIOD
+        self.sma_period = SLOW_SMA_PERIOD
+        
         self.symbol = symbol
-        self.ema_period = ema_period
-        self.sma_period = sma_period
         self.interval_minutes = interval_minutes
         self.position_size = position_size
         self.paper = paper
