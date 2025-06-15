@@ -59,7 +59,6 @@ class SmaEmaCrossoverAlgorithm:
         # Trading state
         self.daily_pnl_threshold = 0.0025  # 0.25% daily loss limit
         self.daily_gain_target = 0.01      # 1% daily gain target
-        self.initial_equity = None
     
     def reconnect(self):
         """Recreate clients in case of connection issues"""
@@ -126,33 +125,38 @@ class SmaEmaCrossoverAlgorithm:
     
     def get_signal(self):
         """
-        Get the current trading signal. This will only recalculate
-        if enough time has passed since the last calculation.
+        Calculate and get the current trading signal.
         """
         try:
-            if self._should_recalculate():
-                # Time to refresh the signal
-                df = self._fetch_market_data()
-                signal_data = self._calculate_signal(df)
-                
-                # Update cache and timestamp
-                self.last_calculation_time = datetime.now()
-                self.cached_signal = signal_data["signal"]
-                self.cached_price = signal_data["price"]
-                
-                print(f"[{self.last_calculation_time}] Calculated new signal: {self.cached_signal} at {self.cached_price}")
-                return signal_data
-            else:
-                # Return cached signal
-                elapsed = datetime.now() - self.last_calculation_time
-                print(f"Using cached signal ({elapsed.seconds}s old): {self.cached_signal}")
-                return {"signal": self.cached_signal, "price": self.cached_price}
+            # Time to refresh the signal
+            df = self._fetch_market_data()
+            signal_data = self._calculate_signal(df)
+            
+            # Update cache and timestamp
+            self.last_calculation_time = datetime.now()
+            self.cached_signal = signal_data["signal"]
+            self.cached_price = signal_data["price"]
+            
+            print(f"[{self.last_calculation_time}] Calculated new signal: {self.cached_signal} at {self.cached_price}")
+            return signal_data
                 
         except Exception as e:
             print(f"Error calculating signal: {str(e)}")
             # Return NONE signal in case of error
             return {"signal": "NONE", "price": None}
     
+    def get_cached_signal(self):
+        """
+        Returns the most recently cached signal without recalculating.
+        """
+        if self.cached_signal is None:
+            # No cached signal available
+            return {"signal": "NONE", "price": None}
+        
+        elapsed = datetime.now() - self.last_calculation_time
+        print(f"Using cached signal ({elapsed.seconds}s old): {self.cached_signal}")
+        return {"signal": self.cached_signal, "price": self.cached_price}
+
     def get_current_equity(self):
         """Get current equity value"""
         return float(self.current_equity)
@@ -201,7 +205,7 @@ class SmaEmaCrossoverAlgorithm:
             self.trading_client.submit_order(
                 MarketOrderRequest(
                     symbol=self.symbol,
-                    notional=self.current_equity,
+                    notional=str(self.current_equity),
                     side=OrderSide.BUY,
                     time_in_force=TimeInForce.DAY
                 )
@@ -217,7 +221,20 @@ class SmaEmaCrossoverAlgorithm:
     
     def run(self):
         """Run one trading cycle"""
-        # Process data and get trading signal
+        
+        # Check if we need to recalculate the signal
+        if not self._should_recalculate():
+            # Not time to recalculate yet, return early with cached signal
+            cached_signal = self.get_cached_signal()
+            return {
+                'signal': cached_signal['signal'],
+                'price': cached_signal['price'],
+                'trade_executed': False,
+                'pnl': self.calculate_pnl() * 100,  # Return as percentage
+                'recalculated': False
+            }
+        
+        # Time to recalculate - get a fresh signal
         signal = self.get_signal()
         
         # Execute trade based on signal
@@ -227,5 +244,6 @@ class SmaEmaCrossoverAlgorithm:
             'signal': signal['signal'],
             'price': signal['price'],
             'trade_executed': trade_executed,
-            'pnl': self.calculate_pnl() * 100  # Return as percentage
+            'pnl': self.calculate_pnl() * 100,  # Return as percentage
+            'recalculated': True
         }
