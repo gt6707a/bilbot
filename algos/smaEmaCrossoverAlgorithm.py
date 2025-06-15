@@ -16,13 +16,13 @@ class SmaEmaCrossoverAlgorithm:
     Sell signal: When fast EMA crosses below slow SMA
     """
     
-    def __init__(self, symbol, interval_minutes=5, position_size=1, paper=True):
+    def __init__(self, symbol, interval_minutes=5, notional="1000", paper=True):
         """
         Initialize the SMA/EMA crossover algorithm with trading capabilities.
         
         :param symbol: The trading symbol (e.g., 'SPY')
         :param interval_minutes: How often (in minutes) to recalculate the signal
-        :param position_size: Number of shares to trade
+        :param notional: Dollar amount to trade per order.
         :param paper: Whether to use paper trading
         """
         # Get API credentials from environment variables
@@ -43,7 +43,7 @@ class SmaEmaCrossoverAlgorithm:
         
         self.symbol = symbol
         self.interval_minutes = interval_minutes
-        self.position_size = position_size
+        self.notional = notional
         self.paper = paper
         
         # Initialize Alpaca clients
@@ -193,7 +193,7 @@ class SmaEmaCrossoverAlgorithm:
             self.trading_client.submit_order(
                 MarketOrderRequest(
                     symbol=self.symbol,
-                    qty=self.position_size,
+                    notional=self.notional,
                     side=OrderSide.BUY,
                     time_in_force=TimeInForce.DAY
                 )
@@ -205,7 +205,7 @@ class SmaEmaCrossoverAlgorithm:
             self.trading_client.submit_order(
                 MarketOrderRequest(
                     symbol=self.symbol,
-                    qty=current_position,
+                    notional=self.notional,
                     side=OrderSide.SELL,
                     time_in_force=TimeInForce.DAY
                 )

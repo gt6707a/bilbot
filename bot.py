@@ -18,7 +18,6 @@ nyse = pytz.timezone('America/New_York')
 trading_algorithm = SmaEmaCrossoverAlgorithm(
     symbol=SYMBOL,
     interval_minutes=5,  # Recalculate signal every 5 minutes
-    position_size=1,     # Trade 1 share at a time
     paper=True           # Use paper trading
 )
 
