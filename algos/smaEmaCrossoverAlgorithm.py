@@ -89,10 +89,6 @@ class SmaEmaCrossoverAlgorithm:
         bars = self.data_client.get_stock_bars(request_params)
         df = bars.df.reset_index()
         
-        # If multi-symbol response, filter for just our symbol
-        if 'symbol' in df.columns:
-            df = df[df['symbol'] == self.symbol]
-        
         return df
     
     def _calculate_signal(self, df):
@@ -177,6 +173,9 @@ class SmaEmaCrossoverAlgorithm:
         """
         try:
             position = self.trading_client.get_open_position(self.symbol)
+            if (position.qty > 0):
+                self.current_equity = float(position.market_value)
+
             return float(position.qty)
         except Exception:
             # No position exists
@@ -221,6 +220,8 @@ class SmaEmaCrossoverAlgorithm:
     
     def run(self):
         """Run one trading cycle"""
+        # Get current open position and update current equity
+        self.get_open_position()
         
         # Check if we need to recalculate the signal
         if not self._should_recalculate():

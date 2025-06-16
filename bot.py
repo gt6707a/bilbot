@@ -36,7 +36,6 @@ if __name__ == "__main__":
     print(f"Bot starting at {pd.Timestamp.now(tz=nyse)}")
     
     # Set initial equity
-    trading_algorithm.initialize_equity()
     print(f"Initial equity: ${trading_algorithm.get_current_equity():.2f}")
     
     trading_active = True
