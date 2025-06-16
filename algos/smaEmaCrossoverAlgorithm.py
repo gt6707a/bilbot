@@ -1,4 +1,4 @@
-import time
+import os
 import pandas as pd
 from datetime import datetime, timedelta
 from alpaca.trading.client import TradingClient
@@ -16,32 +16,40 @@ class SmaEmaCrossoverAlgorithm:
     Sell signal: When fast EMA crosses below slow SMA
     """
     
-    def __init__(self, api_key, api_secret, symbol, ema_period=9, sma_period=21, 
-                 interval_minutes=5, position_size=1, paper=True):
+    def __init__(self, symbol, interval_minutes=5, initial_equity=1000, paper=True):
         """
         Initialize the SMA/EMA crossover algorithm with trading capabilities.
         
-        :param api_key: Alpaca API key
-        :param api_secret: Alpaca API secret
         :param symbol: The trading symbol (e.g., 'SPY')
-        :param ema_period: Period for EMA calculation (e.g., 9)
-        :param sma_period: Period for SMA calculation (e.g., 21)
         :param interval_minutes: How often (in minutes) to recalculate the signal
-        :param position_size: Number of shares to trade
+        :param initial_equity: Dollar amount to begin the day with.
         :param paper: Whether to use paper trading
         """
+        # Get API credentials from environment variables
+        self.api_key = os.getenv('ALPACA_KEY')
+        self.api_secret = os.getenv('ALPACA_SECRET')
+        
+        if not self.api_key or not self.api_secret:
+            raise ValueError("ALPACA_KEY and ALPACA_SECRET environment variables must be set")
+        
+        # Indicator periods defined locally
+        # Define indicator period constants
+        FAST_EMA_PERIOD = 9
+        SLOW_SMA_PERIOD = 21
+        
+        # Assign to instance variables for use throughout the class
+        self.ema_period = FAST_EMA_PERIOD
+        self.sma_period = SLOW_SMA_PERIOD
+        
         self.symbol = symbol
-        self.ema_period = ema_period
-        self.sma_period = sma_period
         self.interval_minutes = interval_minutes
-        self.position_size = position_size
-        self.api_key = api_key
-        self.api_secret = api_secret
+        self.initial_equity = initial_equity
+        self.current_equity = initial_equity
         self.paper = paper
         
         # Initialize Alpaca clients
-        self.data_client = StockHistoricalDataClient(api_key, api_secret)
-        self.trading_client = TradingClient(api_key, api_secret, paper=paper)
+        self.data_client = StockHistoricalDataClient(self.api_key, self.api_secret)
+        self.trading_client = TradingClient(self.api_key, self.api_secret, paper=paper)
         
         # Track when we last calculated a signal
         self.last_calculation_time = None
@@ -51,7 +59,6 @@ class SmaEmaCrossoverAlgorithm:
         # Trading state
         self.daily_pnl_threshold = 0.0025  # 0.25% daily loss limit
         self.daily_gain_target = 0.01      # 1% daily gain target
-        self.initial_equity = None
     
     def reconnect(self):
         """Recreate clients in case of connection issues"""
@@ -75,16 +82,12 @@ class SmaEmaCrossoverAlgorithm:
         request_params = StockBarsRequest(
             symbol_or_symbols=self.symbol,
             timeframe=TimeFrame.Minute,
-            start=pd.Timestamp.now() - pd.Timedelta(days=5),  # Look back 5 days to get enough data
+            start=pd.Timestamp.now() - pd.Timedelta(days=5),
             limit=lookback
         )
         
         bars = self.data_client.get_stock_bars(request_params)
         df = bars.df.reset_index()
-        
-        # If multi-symbol response, filter for just our symbol
-        if 'symbol' in df.columns:
-            df = df[df['symbol'] == self.symbol]
         
         return df
     
@@ -118,74 +121,90 @@ class SmaEmaCrossoverAlgorithm:
     
     def get_signal(self):
         """
-        Get the current trading signal. This will only recalculate
-        if enough time has passed since the last calculation.
+        Calculate and get the current trading signal.
         """
         try:
-            if self._should_recalculate():
-                # Time to refresh the signal
-                df = self._fetch_market_data()
-                signal_data = self._calculate_signal(df)
-                
-                # Update cache and timestamp
-                self.last_calculation_time = datetime.now()
-                self.cached_signal = signal_data["signal"]
-                self.cached_price = signal_data["price"]
-                
-                print(f"[{self.last_calculation_time}] Calculated new signal: {self.cached_signal} at {self.cached_price}")
-                return signal_data
-            else:
-                # Return cached signal
-                elapsed = datetime.now() - self.last_calculation_time
-                print(f"Using cached signal ({elapsed.seconds}s old): {self.cached_signal}")
-                return {"signal": self.cached_signal, "price": self.cached_price}
+            # Time to refresh the signal
+            df = self._fetch_market_data()
+            signal_data = self._calculate_signal(df)
+            
+            # Update cache and timestamp
+            self.last_calculation_time = datetime.now()
+            self.cached_signal = signal_data["signal"]
+            self.cached_price = signal_data["price"]
+            
+            print(f"[{self.last_calculation_time}] Calculated new signal: {self.cached_signal} at {self.cached_price}")
+            return signal_data
                 
         except Exception as e:
             print(f"Error calculating signal: {str(e)}")
             # Return NONE signal in case of error
             return {"signal": "NONE", "price": None}
     
-    def initialize_equity(self):
-        """Set the initial equity value"""
-        account = self.trading_client.get_account()
-        self.initial_equity = float(account.equity)
-    
+    def get_cached_signal(self):
+        """
+        Returns the most recently cached signal without recalculating.
+        """
+        if self.cached_signal is None:
+            # No cached signal available
+            return {"signal": "NONE", "price": None}
+        
+        elapsed = datetime.now() - self.last_calculation_time
+        print(f"Using cached signal ({elapsed.seconds}s old): {self.cached_signal}")
+        return {"signal": self.cached_signal, "price": self.cached_price}
+
     def get_current_equity(self):
         """Get current equity value"""
-        account = self.trading_client.get_account()
-        return float(account.equity)
+        return float(self.current_equity)
     
     def calculate_pnl(self):
         """Calculate daily P&L percentage"""
-        current_equity = self.get_current_equity()
-        
-        # Set initial equity if not set
-        if self.initial_equity is None:
-            self.initial_equity = current_equity
-            return 0.0
-            
-        return (current_equity - self.initial_equity) / self.initial_equity
-    
-    def get_positions(self):
-        """Get current positions as {symbol: qty}"""
-        return {p.symbol: float(p.qty) for p in self.trading_client.get_all_positions()}
+        return (self.current_equity - self.initial_equity) / self.initial_equity
     
     def exit_all_positions(self):
         """Liquidate all positions"""
         self.trading_client.close_all_positions(cancel_orders=True)
         print("Closed all positions")
     
+    def get_open_position(self):
+        """
+        Get current open position for the symbol.
+        Returns position quantity or 0 if no position exists.
+        """
+        try:
+            position = self.trading_client.get_open_position(self.symbol)
+            if (position.qty > 0):
+                self.current_equity = float(position.market_value)
+
+            return float(position.qty)
+        except Exception:
+            # No position exists
+            return 0
+
+    def close_position(self):
+        """
+        Close the position for the symbol.
+        Returns True if position was closed successfully.
+        """
+        try:
+            self.trading_client.close_position(self.symbol)
+            print(f"Closed position for {self.symbol}")
+            return True
+        except Exception as e:
+            print(f"Error closing position for {self.symbol}: {str(e)}")
+            return False
+    
     def execute_trade(self, signal):
         """Execute a trade based on the given signal"""
-        positions = self.get_positions()
-        current_position = positions.get(self.symbol, 0)
+        # Get current position using the new method
+        current_position = self.get_open_position()
         
         if signal['signal'] == "BUY" and current_position == 0:
             print(f"BUY signal at {signal['price']}")
             self.trading_client.submit_order(
                 MarketOrderRequest(
                     symbol=self.symbol,
-                    qty=self.position_size,
+                    notional=str(self.current_equity),
                     side=OrderSide.BUY,
                     time_in_force=TimeInForce.DAY
                 )
@@ -194,26 +213,38 @@ class SmaEmaCrossoverAlgorithm:
         
         elif signal['signal'] == "SELL" and current_position > 0:
             print(f"SELL signal at {signal['price']}")
-            self.trading_client.submit_order(
-                MarketOrderRequest(
-                    symbol=self.symbol,
-                    qty=current_position,
-                    side=OrderSide.SELL,
-                    time_in_force=TimeInForce.DAY
-                )
-            )
-            return True
+            # Use close_position instead of submitting a sell order
+            return self.close_position()
             
         return False
     
     def run(self):
         """Run one trading cycle"""
-        # Core algorithm functionality - get signal and execute trade
+        # Get current open position and update current equity
+        self.get_open_position()
+        
+        # Check if we need to recalculate the signal
+        if not self._should_recalculate():
+            # Not time to recalculate yet, return early with cached signal
+            cached_signal = self.get_cached_signal()
+            return {
+                'signal': cached_signal['signal'],
+                'price': cached_signal['price'],
+                'trade_executed': False,
+                'pnl': self.calculate_pnl() * 100,  # Return as percentage
+                'recalculated': False
+            }
+        
+        # Time to recalculate - get a fresh signal
         signal = self.get_signal()
+        
+        # Execute trade based on signal
         trade_executed = self.execute_trade(signal)
         
         return {
             'signal': signal['signal'],
             'price': signal['price'],
-            'trade_executed': trade_executed
+            'trade_executed': trade_executed,
+            'pnl': self.calculate_pnl() * 100,  # Return as percentage
+            'recalculated': True
         }
