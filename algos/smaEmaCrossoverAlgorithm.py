@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+import logging
 from datetime import datetime, timedelta
 from alpaca.trading.client import TradingClient
 from alpaca.data.historical import StockHistoricalDataClient
@@ -25,6 +26,15 @@ class SmaEmaCrossoverAlgorithm:
         :param initial_equity: Dollar amount to begin the day with.
         :param paper: Whether to use paper trading
         """
+        # Configure logging
+        self.logger = logging.getLogger(__name__)
+        if not self.logger.handlers:
+            # Set up logging if not already configured
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+            )
+        
         # Get API credentials from environment variables
         self.api_key = os.getenv('ALPACA_KEY')
         self.api_secret = os.getenv('ALPACA_SECRET')
@@ -133,11 +143,11 @@ class SmaEmaCrossoverAlgorithm:
             self.cached_signal = signal_data["signal"]
             self.cached_price = signal_data["price"]
             
-            print(f"[{self.last_calculation_time}] Calculated new signal: {self.cached_signal} at {self.cached_price}")
+            self.logger.info(f"Calculated new signal: {self.cached_signal} at {self.cached_price}")
             return signal_data
                 
         except Exception as e:
-            print(f"Error calculating signal: {str(e)}")
+            self.logger.info(f"Error calculating signal: {str(e)}")
             # Return NONE signal in case of error
             return {"signal": "NONE", "price": None}
     
@@ -150,7 +160,7 @@ class SmaEmaCrossoverAlgorithm:
             return {"signal": "NONE", "price": None}
         
         elapsed = datetime.now() - self.last_calculation_time
-        print(f"Using cached signal ({elapsed.seconds}s old): {self.cached_signal}")
+        self.logger.info(f"Using cached signal ({elapsed.seconds}s old): {self.cached_signal}")
         return {"signal": self.cached_signal, "price": self.cached_price}
 
     def get_current_equity(self):
@@ -164,7 +174,7 @@ class SmaEmaCrossoverAlgorithm:
     def exit_all_positions(self):
         """Liquidate all positions"""
         self.trading_client.close_all_positions(cancel_orders=True)
-        print("Closed all positions")
+        self.logger.info("Closed all positions")
     
     def get_open_position(self):
         """
@@ -188,10 +198,10 @@ class SmaEmaCrossoverAlgorithm:
         """
         try:
             self.trading_client.close_position(self.symbol)
-            print(f"Closed position for {self.symbol}")
+            self.logger.info(f"Closed position for {self.symbol}")
             return True
         except Exception as e:
-            print(f"Error closing position for {self.symbol}: {str(e)}")
+            self.logger.info(f"Error closing position for {self.symbol}: {str(e)}")
             return False
     
     def execute_trade(self, signal):
@@ -200,7 +210,7 @@ class SmaEmaCrossoverAlgorithm:
         current_position = self.get_open_position()
         
         if signal['signal'] == "BUY" and current_position == 0:
-            print(f"BUY signal at {signal['price']}")
+            self.logger.info(f"BUY signal at {signal['price']}")
             self.trading_client.submit_order(
                 MarketOrderRequest(
                     symbol=self.symbol,
@@ -212,7 +222,7 @@ class SmaEmaCrossoverAlgorithm:
             return True
         
         elif signal['signal'] == "SELL" and current_position > 0:
-            print(f"SELL signal at {signal['price']}")
+            self.logger.info(f"SELL signal at {signal['price']}")
             # Use close_position instead of submitting a sell order
             return self.close_position()
             
