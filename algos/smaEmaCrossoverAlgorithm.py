@@ -118,16 +118,19 @@ class SmaEmaCrossoverAlgorithm:
         prev_ema_above_sma = last_two['ema'].iloc[0] > last_two['sma'].iloc[0]
         curr_ema_above_sma = last_two['ema'].iloc[1] > last_two['sma'].iloc[1]
         
+        # Get the current price (most recent price)
+        current_price = last_two['close'].iloc[-1]
+        
         # EMA crosses above SMA: Buy signal
         if not prev_ema_above_sma and curr_ema_above_sma:
-            return {"signal": "BUY", "price": df['close'].iloc[-1]}
+            return {"signal": "BUY", "price": current_price}
         
         # EMA crosses below SMA: Sell signal
         elif prev_ema_above_sma and not curr_ema_above_sma:
-            return {"signal": "SELL", "price": df['close'].iloc[-1]}
+            return {"signal": "SELL", "price": current_price}
         
         # No crossover
-        return {"signal": "NONE", "price": df['close'].iloc[-1]}
+        return {"signal": "NONE", "price": current_price}
     
     def get_signal(self):
         """
