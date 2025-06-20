@@ -3,7 +3,15 @@ import time
 import pandas as pd
 import pytz
 import holidays
+import logging
 from datetime import datetime
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger('bilbot')
 
 # Import our algorithm
 from algos.smaEmaCrossoverAlgorithm import SmaEmaCrossoverAlgorithm
@@ -33,10 +41,10 @@ def market_is_open():
     return market_open <= now <= market_close
 
 if __name__ == "__main__":
-    print(f"Bot starting at {pd.Timestamp.now(tz=nyse)}")
+    logger.info(f"Bot starting at {pd.Timestamp.now(tz=nyse)}")
     
     # Set initial equity
-    print(f"Initial equity: ${trading_algorithm.get_current_equity():.2f}")
+    logger.info(f"Initial equity: ${trading_algorithm.get_current_equity():.2f}")
     
     trading_active = True
     
@@ -44,8 +52,8 @@ if __name__ == "__main__":
     while trading_active:
         # Check if market is open - bot's responsibility
         if not market_is_open():
-            print(f"Market is closed at {datetime.now(tz=nyse)}")
-            print("Market is closed. Terminating the process.")
+            logger.info(f"Market is closed at {datetime.now(tz=nyse)}")
+            logger.info("Market is closed. Terminating the process.")
             # Exit all positions as a safety measure before terminating
             trading_algorithm.exit_all_positions()
             # Break out of the loop which will end the program
@@ -54,7 +62,7 @@ if __name__ == "__main__":
         # Check risk limits - bot's responsibility
         pnl = trading_algorithm.calculate_pnl()
         if pnl <= -trading_algorithm.daily_pnl_threshold or pnl >= trading_algorithm.daily_gain_target:
-            print(f"Daily P&L limit reached: {pnl*100:.2f}%")
+            logger.info(f"Daily P&L limit reached: {pnl*100:.2f}%")
             trading_algorithm.exit_all_positions()
             trading_active = False
             break
@@ -63,10 +71,10 @@ if __name__ == "__main__":
         try:
             trading_algorithm.run()
         except Exception as e:
-            print(f"Error in trading cycle: {str(e)}")
+            logger.info(f"Error in trading cycle: {str(e)}")
             # Handle reconnection if needed
             if isinstance(e, OSError) and getattr(e, 'errno', None) == 9:  # Bad file descriptor
-                print("Recreating Alpaca clients due to connection error...")
+                logger.info("Recreating Alpaca clients due to connection error...")
                 trading_algorithm.reconnect()
         
         time.sleep(CHECK_INTERVAL)
@@ -74,6 +82,6 @@ if __name__ == "__main__":
     # Clean up at end of day
     trading_algorithm.exit_all_positions()
     
-    print(f"Trading day complete at {pd.Timestamp.now(tz=nyse)}")
+    logger.info(f"Trading day complete at {pd.Timestamp.now(tz=nyse)}")
     final_pnl = trading_algorithm.calculate_pnl()
-    print(f"Daily P&L: {final_pnl*100:.2f}%")
+    logger.info(f"Daily P&L: {final_pnl*100:.2f}%")
