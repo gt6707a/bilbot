@@ -186,6 +186,7 @@ class SmaEmaCrossoverAlgorithm:
         """
         try:
             position = self.trading_client.get_open_position(self.symbol)
+            self.logger.info(f"Current position for {self.symbol}: {position.qty} shares")
             if (position.qty > 0):
                 self.current_equity = float(position.market_value)
 
