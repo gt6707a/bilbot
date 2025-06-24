@@ -36,11 +36,11 @@ class SmaEmaCrossoverAlgorithm:
             )
         
         # Get API credentials from environment variables
-        self.api_key = os.getenv('ALPACA_KEY')
-        self.api_secret = os.getenv('ALPACA_SECRET')
+        self.api_key = os.getenv('ALPACA_API_KEY') or os.getenv('ALPACA_KEY')
+        self.api_secret = os.getenv('ALPACA_API_SECRET') or os.getenv('ALPACA_SECRET')
         
         if not self.api_key or not self.api_secret:
-            raise ValueError("ALPACA_KEY and ALPACA_SECRET environment variables must be set")
+            raise ValueError("ALPACA_API_KEY/ALPACA_KEY and ALPACA_API_SECRET/ALPACA_SECRET environment variables must be set")
         
         # Indicator periods defined locally
         # Define indicator period constants
@@ -88,16 +88,38 @@ class SmaEmaCrossoverAlgorithm:
         # Calculate how many bars to request based on which period is longer
         lookback = max(self.ema_period, self.sma_period) * 2  # Double to ensure enough data
         
-        # Get historical data
+        # Get the most recent data by using a shorter time window
+        # Use hours instead of days to get more recent data
+        end_time = pd.Timestamp.now()
+        start_time = end_time - pd.Timedelta(hours=24)  # Look back 24 hours max
+        
         request_params = StockBarsRequest(
             symbol_or_symbols=self.symbol,
             timeframe=TimeFrame.Minute,
-            start=pd.Timestamp.now() - pd.Timedelta(days=5),
-            limit=lookback
+            start=start_time,
+            end=end_time,
+            limit=lookback * 3  # Request more data to ensure we have enough
         )
         
         bars = self.data_client.get_stock_bars(request_params)
         df = bars.df.reset_index()
+        
+        # Sort by timestamp to ensure we have the most recent data
+        if not df.empty:
+            df = df.sort_values('timestamp').reset_index(drop=True)
+        
+        # Add debugging to see what data we're getting
+        if not df.empty:
+            self.logger.info(f"Fetched {len(df)} bars for {self.symbol}")
+            self.logger.info(f"Data range: {df['timestamp'].min()} to {df['timestamp'].max()}")
+            
+            # Show last few prices with timestamps
+            last_3 = df.tail(3)
+            self.logger.info("Last 3 data points:")
+            for idx, row in last_3.iterrows():
+                self.logger.info(f"  {row['timestamp']}: ${row['close']:.2f}")
+        else:
+            self.logger.warning(f"No data received for {self.symbol}")
         
         return df
     
