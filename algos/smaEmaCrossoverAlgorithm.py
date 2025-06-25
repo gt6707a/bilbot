@@ -97,7 +97,7 @@ class SmaEmaCrossoverAlgorithm:
             symbol_or_symbols=self.symbol,
             timeframe=TimeFrame.Minute,
             start=start_time,
-            end=end_time,
+            # end=end_time,
             limit=lookback * 3  # Request more data to ensure we have enough
         )
         
