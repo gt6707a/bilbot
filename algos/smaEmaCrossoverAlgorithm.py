@@ -234,6 +234,7 @@ class SmaEmaCrossoverAlgorithm:
         """Execute a trade based on the given signal"""
         # Get current position using the new method
         current_position = self.get_open_position()
+        self.logger.info(f"Current position: {current_position} shares")
         
         if signal['signal'] == "BUY" and current_position == 0:
             self.logger.info(f"BUY signal at {signal['price']}")
