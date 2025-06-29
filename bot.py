@@ -13,8 +13,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger('bilbot')
 
-# Import our algorithm
-from algos.smaEmaCrossoverAlgorithm import SmaEmaCrossoverAlgorithm
+# Import our Polygon-based trading bot
+from polygon_trading_bot import PolygonTradingBot
 
 # Configuration
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 60))  # Seconds
@@ -22,8 +22,8 @@ SYMBOL = "SPY"  # Low-cost, liquid ETF
 
 nyse = pytz.timezone('America/New_York')
 
-# Initialize the algorithm with required parameters
-trading_algorithm = SmaEmaCrossoverAlgorithm(
+# Initialize the Polygon-based trading bot with required parameters
+trading_algorithm = PolygonTradingBot(
     symbol=SYMBOL,
     interval_minutes=5,  # Recalculate signal every 5 minutes
     paper=True           # Use paper trading
@@ -41,10 +41,11 @@ def market_is_open():
     return market_open <= now <= market_close
 
 if __name__ == "__main__":
-    logger.info(f"Bot starting at {pd.Timestamp.now(tz=nyse)}")
-    
+    logger.info(f"Polygon Trading Bot starting at {pd.Timestamp.now(tz=nyse)}")
+    logger.info(f"Symbol: {SYMBOL}")
+
     # Set initial equity
-    logger.info(f"Initial equity: ${trading_algorithm.get_current_equity():.2f}")
+    logger.info(f"💰 Initial equity: ${trading_algorithm.get_current_equity():.2f}")
     
     trading_active = True
     

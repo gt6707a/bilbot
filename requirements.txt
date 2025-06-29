@@ -4,3 +4,5 @@ schedule
 python-dateutil
 pytz
 holidays
+requests
+polygon-api-client
