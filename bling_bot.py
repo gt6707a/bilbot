@@ -102,24 +102,7 @@ class BlingBot:
         time_since_last = datetime.now() - self.last_signal_time
         return time_since_last.total_seconds() >= (self.interval_minutes * 60)
     
-    def _update_position_info(self):
-        """Update current position and current_value from market_value"""
-        try:
-            position = self.trading_client.get_open_position(self.symbol)
-            self.current_position = float(position.qty)
-            
-            # Update current_value using position's market_value
-            if position.market_value:
-                self.current_value = float(position.market_value)
 
-            # For our per-symbol tracking, current_value = cash + position value
-            # If we have a position, assume remaining cash is minimal, so current_value ≈ market_value
-            self.logger.debug(f"Position: {self.current_position} shares, Market value: ${self.current_value:.2f}")
-            self.logger.debug(f"Current per-symbol value: ${self.current_value:.2f}")
-        
-        except Exception:
-            self.logger.error(f"❌ Error updating position info: {e}")
-            # No position exists - reset to initial value
     
     def get_signal(self):
         """Get fresh trading signal from SMA/EMA crossover algorithm"""
@@ -159,24 +142,16 @@ class BlingBot:
     
     def get_current_equity(self):
         """Get current per-symbol value"""
-        self._update_position_info()
+        self.get_open_position()
         return float(self.current_value)
     
     def calculate_pnl(self):
         """Calculate daily P&L percentage"""
         return (self.current_value - self.initial_value) / self.initial_value
     
-    def exit_all_positions(self):
-        """Liquidate all positions"""
-        try:
-            self.trading_client.close_all_positions(cancel_orders=True)
-            self.logger.info("✅ Closed all positions")
-        except Exception as e:
-            self.logger.error(f"❌ Error closing positions: {e}")
-    
     def get_open_position(self):
         """
-        Get current open position for the symbol and update current_value.
+        Get current open position for the symbol and update current_position and current_value.
         Returns position quantity or 0 if no position exists.
         """
         try:
@@ -195,9 +170,10 @@ class BlingBot:
             
             return qty
         except Exception:
-            # No position exists
+            # No position exists - reset to initial value
             self.current_position = 0
             self.current_value = self.initial_value
+            self.logger.debug("No open position - reset to initial value")
             return 0
     
     def close_position(self):
@@ -290,7 +266,7 @@ class BlingBot:
         """Run one trading cycle"""
         try:
             # Update position info and per-symbol equity
-            self._update_position_info()
+            self.get_open_position()
             
             # Check if we need to recalculate the signal
             if not self._should_recalculate():

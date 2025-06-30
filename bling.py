@@ -55,7 +55,7 @@ if __name__ == "__main__":
         if not market_is_open():
             logger.info(f"Market is closed at {datetime.now(tz=nyse)}")
             # Exit all positions as a safety measure before terminating
-            bling_bot.exit_all_positions()
+            bling_bot.close_position()
             # Break out of the loop which will end the program
             break
             
