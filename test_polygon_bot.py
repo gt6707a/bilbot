@@ -24,7 +24,7 @@ except ImportError:
 # Add current directory to path to import our modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from polygon_trading_bot import PolygonTradingBot
+from trading_bot import TradingBot
 
 # Configure logging
 logging.basicConfig(
@@ -40,7 +40,7 @@ def test_bot_initialization():
     print("="*60)
     
     try:
-        bot = PolygonTradingBot(
+        bot = TradingBot(
             symbol='SPY',
             interval_minutes=5,
             initial_equity=10000,
@@ -198,7 +198,7 @@ def main():
         
         # Create bot for this symbol
         try:
-            symbol_bot = PolygonTradingBot(
+            symbol_bot = TradingBot(
                 symbol=symbol,
                 interval_minutes=5,
                 initial_equity=1000,  # Use smaller initial equity for testing

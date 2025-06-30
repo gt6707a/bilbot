@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger('bilbot')
 
 # Import our Polygon-based trading bot
-from polygon_trading_bot import PolygonTradingBot
+from trading_bot import TradingBot
 
 # Configuration
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 60))  # Seconds
@@ -23,7 +23,7 @@ SYMBOL = "SPY"  # Low-cost, liquid ETF
 nyse = pytz.timezone('America/New_York')
 
 # Initialize the Polygon-based trading bot with required parameters
-trading_bot = PolygonTradingBot(
+trading_bot = TradingBot(
     symbol=SYMBOL,
     interval_minutes=5,  # Recalculate signal every 5 minutes
     paper=True           # Use paper trading

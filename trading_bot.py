@@ -8,7 +8,7 @@ from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
 
-class PolygonTradingBot:
+class TradingBot:
     """
     Trading bot that uses SMA/EMA crossover algorithm for signals and Alpaca for trade execution.
     Uses simple equity tracking: starts with initial_equity, only updates on realized P&L.
@@ -76,7 +76,7 @@ class PolygonTradingBot:
             self.logger.error(f"❌ Failed to initialize Alpaca client: {e}")
             raise
         
-        self.logger.info(f"🤖 PolygonTradingBot initialized for {symbol}")
+        self.logger.info(f"🤖 TradingBot initialized for {symbol}")
         self.logger.info(f"   Initial value: ${self.current_value:.2f}")
         self.logger.info(f"   Signal interval: {interval_minutes} minutes")
         self.logger.info(f"   Trading mode: {'Paper' if paper else 'Live'}")
