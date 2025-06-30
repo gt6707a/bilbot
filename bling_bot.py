@@ -105,31 +105,21 @@ class BlingBot:
     def _update_position_info(self):
         """Update current position and current_value from market_value"""
         try:
-            # Get current position for this symbol
-            try:
-                position = self.trading_client.get_open_position(self.symbol)
-                self.current_position = float(position.qty)
-                
-                # Update current_value using position's market_value
-                if position.market_value:
-                    # Add cash equivalent to market value to get total current value
-                    market_value = float(position.market_value)
-                    # For our per-symbol tracking, current_value = cash + position value
-                    # If we have a position, assume remaining cash is minimal, so current_value ≈ market_value
-                    self.current_value = abs(market_value)  # Use abs for short positions
-                    self.logger.debug(f"Position: {self.current_position} shares, Market value: ${market_value:.2f}")
-                    self.logger.debug(f"Current per-symbol value: ${self.current_value:.2f}")
-                else:
-                    self.logger.debug(f"Position: {self.current_position} shares (no market value)")
-                    
-            except Exception:
-                # No position exists - reset to initial value
-                self.current_position = 0
-                self.current_value = self.initial_value
-                self.logger.debug("No open position - reset to initial value")
-                
-        except Exception as e:
+            position = self.trading_client.get_open_position(self.symbol)
+            self.current_position = float(position.qty)
+            
+            # Update current_value using position's market_value
+            if position.market_value:
+                self.current_value = float(position.market_value)
+
+            # For our per-symbol tracking, current_value = cash + position value
+            # If we have a position, assume remaining cash is minimal, so current_value ≈ market_value
+            self.logger.debug(f"Position: {self.current_position} shares, Market value: ${self.current_value:.2f}")
+            self.logger.debug(f"Current per-symbol value: ${self.current_value:.2f}")
+        
+        except Exception:
             self.logger.error(f"❌ Error updating position info: {e}")
+            # No position exists - reset to initial value
     
     def get_signal(self):
         """Get fresh trading signal from SMA/EMA crossover algorithm"""

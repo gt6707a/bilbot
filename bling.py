@@ -80,7 +80,7 @@ if __name__ == "__main__":
         time.sleep(CHECK_INTERVAL)
     
     # Clean up at end of day
-    bling_bot.exit_all_positions()
+    bling_bot.close_position()
     
     logger.info(f"Trading day complete at {pd.Timestamp.now(tz=nyse)}")
     final_pnl = bling_bot.calculate_pnl()
