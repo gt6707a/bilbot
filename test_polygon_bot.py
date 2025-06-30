@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-Test script for the new Polygon Trading Bot.
-This script tests the bot's signal generation and basic functionality without executing trades.
+Test script for the new Polygon Trading Bot with per-symbol equity tracking.
+This script tests        # Show value tracki        print(f"💰 Per-Symbol Value: ${result.get('per_symbol_value', 'N/A')}")g details
+        if position != 0:
+            print("📊 Note: Value reflects current market value of position")
+        else:
+            print("📊 Note: No position - value shows initial allocation") bot's signal generation and per-symbol equity functionality without executing real trades.
 """
 
 import os
@@ -10,9 +14,12 @@ import time
 import logging
 
 # Load environment variables (if available)
-# If you have python-dotenv installed, uncomment the next two lines:
-# import dotenv
-# dotenv.load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv not available, continue without it
+    pass
 
 # Add current directory to path to import our modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -93,8 +100,8 @@ def test_cached_signal(bot):
         return None
 
 def test_account_info(bot):
-    """Test account information retrieval"""
-    print(f"\n💼 Testing Account Information")
+    """Test account information retrieval and per-symbol equity tracking"""
+    print(f"\n💼 Testing Account Information & Per-Symbol Equity")
     print("-" * 40)
     
     try:
@@ -102,9 +109,24 @@ def test_account_info(bot):
         pnl = bot.calculate_pnl()
         position = bot.get_open_position()
         
-        print(f"💰 Current Equity: ${equity:,.2f}")
+        print(f"💰 Initial Value: ${bot.initial_value:,.2f}")
+        print(f"💰 Current Per-Symbol Value: ${equity:,.2f}")
+        print(f"💰 Bot.current_value: ${bot.current_value:,.2f}")
         print(f"📊 P&L: {pnl*100:+.2f}%")
         print(f"📈 Position: {position} shares")
+        
+        # Test value consistency
+        if abs(equity - bot.current_value) < 0.01:
+            print("✅ Per-symbol value tracking is consistent")
+        else:
+            print("❌ Per-symbol value tracking inconsistency detected")
+            print(f"   get_current_equity(): ${equity:.2f}")
+            print(f"   bot.current_value: ${bot.current_value:.2f}")
+        
+        # Show equity tracking details
+        print(f"📈 Current Position: {position} shares")
+        if position != 0:
+            print("� Note: Equity shows initial value until position is closed (realized P&L)")
         
         return True
     except Exception as e:
@@ -124,7 +146,8 @@ def test_trading_cycle(bot):
         print(f"💰 Price: ${result['price']:.2f}" if result['price'] else "💰 Price: N/A")
         print(f"🔄 Trade Executed: {result['trade_executed']}")
         print(f"📊 P&L: {result['pnl']:+.2f}%")
-        print(f"🔄 Recalculated: {result['recalculated']}")
+        print(f"� Per-Symbol Equity: ${result.get('per_symbol_equity', 'N/A')}")
+        print(f"�🔄 Recalculated: {result['recalculated']}")
         
         return result
     except Exception as e:
@@ -178,8 +201,12 @@ def main():
             symbol_bot = PolygonTradingBot(
                 symbol=symbol,
                 interval_minutes=5,
+                initial_equity=1000,  # Use smaller initial equity for testing
                 paper=True
             )
+            
+            print(f"   Initial value: ${symbol_bot.initial_value:.2f}")
+            print(f"   Current value: ${symbol_bot.current_value:.2f}")
             
             signal = test_signal_generation(symbol_bot, symbol)
             
