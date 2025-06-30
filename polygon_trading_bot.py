@@ -36,7 +36,7 @@ class PolygonTradingBot:
         self.symbol = symbol
         self.interval_minutes = interval_minutes
         self.initial_value = initial_equity
-        self.current_value = initial_equity  # Per-symbol value tracking
+        self.current_value = initial_equity
         self.paper = paper
         
         # Risk management
@@ -216,39 +216,18 @@ class PolygonTradingBot:
             return 0
     
     def close_position(self):
-        """Close current position and update current_value"""
+        """Close current position using Alpaca's close_position method"""
         try:
-            if self.current_position == 0:
-                self.logger.info("No position to close")
-                return False
+            # Use Alpaca's close_position method - it handles checking if position exists
+            close_response = self.trading_client.close_position(symbol_or_asset_id=self.symbol)
             
-            # Get current position details before closing
-            position = self.trading_client.get_open_position(self.symbol)
-            qty = float(position.qty)
-            
-            # Log current market value before closing
-            if position.market_value:
-                market_value = float(position.market_value)
-                self.logger.info(f"📊 Closing position: {qty} shares, Market value: ${market_value:.2f}")
-            
-            # Determine order side
-            side = OrderSide.SELL if qty > 0 else OrderSide.BUY
-            
-            # Create market order to close position
-            order_data = MarketOrderRequest(
-                symbol=self.symbol,
-                qty=abs(qty),
-                side=side,
-                time_in_force=TimeInForce.GTC
-            )
-            
-            order = self.trading_client.submit_order(order_data=order_data)
-            self.logger.info(f"✅ Submitted close order: {side.value} {abs(qty)} shares of {self.symbol}")
+            if hasattr(close_response, 'order_id') and close_response.order_id:
+                self.logger.info(f"✅ Position close order submitted: {close_response.order_id}")
+            else:
+                self.logger.info(f"✅ Position close request submitted for {self.symbol}")
             
             # Reset position tracking - current_value will be updated on next get_open_position call
             self.current_position = 0
-            # After closing, we'll have cash equal to the proceeds (approximately our current_value)
-            # This will be updated accurately on the next _update_position_info call
             
             return True
             
