@@ -6,11 +6,11 @@ from datetime import datetime, timedelta
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
-from polygon_data_fetcher import PolygonDataFetcher
+from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
 
 class PolygonTradingBot:
     """
-    Trading bot that uses Polygon for market data/signals and Alpaca for trade execution.
+    Trading bot that uses SMA/EMA crossover algorithm for signals and Alpaca for trade execution.
     Uses simple equity tracking: starts with initial_equity, only updates on realized P&L.
     Implements the same interface as SmaEmaCrossoverAlgorithm for drop-in replacement.
     """
@@ -50,12 +50,12 @@ class PolygonTradingBot:
         # Current position tracking
         self.current_position = 0
         
-        # Initialize Polygon data fetcher
+        # Initialize SMA/EMA crossover algorithm
         try:
-            self.polygon_fetcher = PolygonDataFetcher()
-            self.logger.info("✅ Polygon data fetcher initialized")
+            self.algo = SmaEmaCrossoverAlgo()
+            self.logger.info("✅ SMA/EMA crossover algorithm initialized")
         except Exception as e:
-            self.logger.error(f"❌ Failed to initialize Polygon fetcher: {e}")
+            self.logger.error(f"❌ Failed to initialize SMA/EMA algorithm: {e}")
             raise
         
         # Initialize Alpaca trading client
@@ -75,9 +75,6 @@ class PolygonTradingBot:
         except Exception as e:
             self.logger.error(f"❌ Failed to initialize Alpaca client: {e}")
             raise
-        
-        # Update initial position info
-        self._update_position_info()
         
         self.logger.info(f"🤖 PolygonTradingBot initialized for {symbol}")
         self.logger.info(f"   Initial value: ${self.current_value:.2f}")
@@ -136,12 +133,12 @@ class PolygonTradingBot:
 
     
     def get_signal(self):
-        """Get fresh trading signal from Polygon"""
+        """Get fresh trading signal from SMA/EMA crossover algorithm"""
         try:
             self.logger.info(f"🔄 Fetching fresh signal for {self.symbol}")
             
-            # Get signal from Polygon
-            signal_info = self.polygon_fetcher.get_signal(
+            # Get signal from SMA/EMA crossover algorithm
+            signal_info = self.algo.get_signal(
                 symbol=self.symbol,
                 timespan='minute',
                 multiplier=5,  # 5-minute intervals
