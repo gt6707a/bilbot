@@ -24,7 +24,7 @@ except ImportError:
 # Add current directory to path to import our modules
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from trading_bot import TradingBot
+from bling_bot import BlingBot
 
 # Configure logging
 logging.basicConfig(
@@ -40,7 +40,7 @@ def test_bot_initialization():
     print("="*60)
     
     try:
-        bot = TradingBot(
+        bot = BlingBot(
             symbol='SPY',
             interval_minutes=5,
             initial_equity=10000,
@@ -198,7 +198,7 @@ def main():
         
         # Create bot for this symbol
         try:
-            symbol_bot = TradingBot(
+            symbol_bot = BlingBot(
                 symbol=symbol,
                 interval_minutes=5,
                 initial_equity=1000,  # Use smaller initial equity for testing
