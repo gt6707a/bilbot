@@ -206,22 +206,9 @@ class BlingBot:
             if signal['signal'] in ['ERROR', 'NONE']:
                 return False
             
-            # Calculate position size using per-symbol value (use 90% of available value)
-            available_value = self.current_value * 0.9
-            
-            if signal['price'] is None or signal['price'] <= 0:
-                self.logger.warning("Invalid price in signal, cannot execute trade")
-                return False
-            
-            shares_to_trade = int(available_value / signal['price'])
-            
-            if shares_to_trade <= 0:
-                self.logger.warning(f"Insufficient per-symbol value to trade: ${self.current_value:.2f}")
-                return False
-            
             # Handle BUY signal
             if signal['signal'] == 'BUY':
-                if current_position >= 0:  # Not short, can buy
+                if current_position == 0:  # No position, can buy
                     order_data = MarketOrderRequest(
                         symbol=self.symbol,
                         notional=str(self.current_value),
@@ -229,33 +216,22 @@ class BlingBot:
                         time_in_force=TimeInForce.GTC
                     )
                     
-                    order = self.trading_client.submit_order(order_data=order_data)
-                    self.logger.info(f"✅ BUY order submitted: {shares_to_trade} shares of {self.symbol} at ${signal['price']:.2f}")
-                    self.logger.info(f"   Using ${available_value:.2f} of ${self.current_value:.2f} per-symbol value")
-                    
+                    self.trading_client.submit_order(order_data=order_data)
+                    self.logger.info(f"✅ BUY order submitted: ${self.current_value:.2f} of {self.symbol}")
                     return True
                 else:
-                    # Close short position first
-                    return self.close_position()
-            
+                    self.logger.info(f"Already have position of {current_position} shares, skipping BUY")
+                    return False
+
             # Handle SELL signal
             elif signal['signal'] == 'SELL':
                 if current_position > 0:  # Have long position, can sell
+                    self.logger.info(f"SELL signal received, closing position of {current_position} shares")
                     return self.close_position()
-                elif current_position == 0:  # No position, can short
-                    order_data = MarketOrderRequest(
-                        symbol=self.symbol,
-                        qty=shares_to_trade,
-                        side=OrderSide.SELL,
-                        time_in_force=TimeInForce.GTC
-                    )
-                    
-                    order = self.trading_client.submit_order(order_data=order_data)
-                    self.logger.info(f"✅ SELL order submitted: {shares_to_trade} shares of {self.symbol} at ${signal['price']:.2f}")
-                    self.logger.info(f"   Using ${available_value:.2f} of ${self.current_value:.2f} per-symbol value")
-                    
-                    return True
-            
+                else:
+                    self.logger.info(f"No position to sell for {self.symbol}")
+                    return False
+
             return False
             
         except Exception as e:
