@@ -11,17 +11,17 @@ from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
 class BlingBot:
     """
     Trading bot that uses SMA/EMA crossover algorithm for signals and Alpaca for trade execution.
-    Uses simple equity tracking: starts with initial_equity, only updates on realized P&L.
+    Uses simple equity tracking: starts with initial_value, only updates on realized P&L.
     Implements the same interface as SmaEmaCrossoverAlgorithm for drop-in replacement.
     """
     
-    def __init__(self, symbol, interval_minutes=5, initial_equity=1000, paper=True):
+    def __init__(self, symbol, interval_minutes=5, initial_value=1000, paper=True):
         """
         Initialize the Polygon-based trading bot.
         
         :param symbol: The trading symbol (e.g., 'SPY')
         :param interval_minutes: How often (in minutes) to recalculate the signal
-        :param initial_equity: Dollar amount to begin the day with
+        :param initial_value: Dollar amount to begin the day with
         :param paper: Whether to use paper trading
         """
         # Configure logging
@@ -35,8 +35,8 @@ class BlingBot:
         # Trading parameters
         self.symbol = symbol
         self.interval_minutes = interval_minutes
-        self.initial_value = initial_equity
-        self.current_value = initial_equity
+        self.initial_value = initial_value
+        self.current_value = initial_value
         self.paper = paper
         
         # Risk management
@@ -130,7 +130,6 @@ class BlingBot:
                 
         except Exception as e:
             self.logger.error(f"❌ Error updating position info: {e}")
-
     
     def get_signal(self):
         """Get fresh trading signal from SMA/EMA crossover algorithm"""
@@ -175,8 +174,7 @@ class BlingBot:
     
     def calculate_pnl(self):
         """Calculate daily P&L percentage"""
-        current_value = self.get_current_equity()
-        return (current_value - self.initial_value) / self.initial_value
+        return (self.current_value - self.initial_value) / self.initial_value
     
     def exit_all_positions(self):
         """Liquidate all positions"""
