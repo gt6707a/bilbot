@@ -81,13 +81,13 @@ class SmaEmaCrossoverAlgo:
             for agg in aggs:
                 data.append({
                     'timestamp': pd.to_datetime(agg.timestamp, unit='ms'),
-                    'open': agg.open,
-                    'high': agg.high,
-                    'low': agg.low,
-                    'close': agg.close,
-                    'volume': agg.volume,
-                    'vwap': getattr(agg, 'vwap', None),  # Volume weighted average price
-                    'transactions': getattr(agg, 'transactions', None)
+                    'open': float(agg.open),
+                    'high': float(agg.high),
+                    'low': float(agg.low),
+                    'close': float(agg.close),
+                    'volume': int(agg.volume),
+                    'vwap': float(getattr(agg, 'vwap', 0)) or None,
+                    'transactions': int(getattr(agg, 'transactions', 0)) or None
                 })
             
             if not data:
