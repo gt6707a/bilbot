@@ -42,6 +42,9 @@ class SmaEmaCrossoverAlgo:
         self.ema_period = 9
         self.sma_period = 21
         
+        # Signal state tracking
+        self.current_signal = None  # Will be 'BUY' or 'SELL'
+        
     def fetch_aggregates(self, symbol, timespan='minute', multiplier=5, days_back=5):
         """
         Fetch aggregate data from Polygon.
@@ -81,13 +84,13 @@ class SmaEmaCrossoverAlgo:
             for agg in aggs:
                 data.append({
                     'timestamp': pd.to_datetime(agg.timestamp, unit='ms'),
-                    'open': agg.open,
-                    'high': agg.high,
-                    'low': agg.low,
-                    'close': agg.close,
-                    'volume': agg.volume,
-                    'vwap': getattr(agg, 'vwap', None),  # Volume weighted average price
-                    'transactions': getattr(agg, 'transactions', None)
+                    'open': float(agg.open),
+                    'high': float(agg.high),
+                    'low': float(agg.low),
+                    'close': float(agg.close),
+                    'volume': int(agg.volume),
+                    'vwap': float(getattr(agg, 'vwap', 0)) or None,
+                    'transactions': int(getattr(agg, 'transactions', 0)) or None
                 })
             
             if not data:
@@ -163,13 +166,15 @@ class SmaEmaCrossoverAlgo:
     def detect_crossover(self, df):
         """
         Detect EMA/SMA crossover signals.
+        Only returns BUY when EMA crosses above SMA, SELL when EMA crosses below SMA.
+        Maintains the last crossover signal when no new crossover is detected.
         
         :param df: DataFrame with 'ema_9' and 'sma_21' columns
         :return: Dict with signal information
         """
         if df.empty or len(df) < 2:
             return {
-                "signal": "NONE", 
+                "signal": self.current_signal or "SELL",  # Default to SELL if no signal yet
                 "price": None, 
                 "reason": "Insufficient data",
                 "timestamp": None
@@ -180,10 +185,14 @@ class SmaEmaCrossoverAlgo:
         
         # Check if we have valid indicator values
         if last_two['ema_9'].isna().any() or last_two['sma_21'].isna().any():
+            # If we don't have a current signal, look back through the data to find the last crossover
+            if self.current_signal is None:
+                self.current_signal = self._find_last_crossover_signal(df)
+            
             return {
-                "signal": "NONE", 
+                "signal": self.current_signal or "SELL",
                 "price": df['close'].iloc[-1] if not df.empty else None,
-                "reason": "Invalid indicators (NaN values)",
+                "reason": "Invalid indicators (NaN values) - maintaining last signal",
                 "timestamp": df['timestamp'].iloc[-1] if not df.empty else None
             }
         
@@ -198,6 +207,7 @@ class SmaEmaCrossoverAlgo:
         
         # EMA crosses above SMA: Buy signal
         if not prev_ema_above_sma and curr_ema_above_sma:
+            self.current_signal = "BUY"
             return {
                 "signal": "BUY", 
                 "price": current_price,
@@ -210,6 +220,7 @@ class SmaEmaCrossoverAlgo:
         
         # EMA crosses below SMA: Sell signal
         elif prev_ema_above_sma and not curr_ema_above_sma:
+            self.current_signal = "SELL"
             return {
                 "signal": "SELL", 
                 "price": current_price,
@@ -220,11 +231,15 @@ class SmaEmaCrossoverAlgo:
                 "crossover_type": "bearish"
             }
         
-        # No crossover
+        # No crossover detected - maintain current signal
+        # If we don't have a current signal, look back to find the last crossover
+        if self.current_signal is None:
+            self.current_signal = self._find_last_crossover_signal(df)
+        
         return {
-            "signal": "NONE", 
+            "signal": self.current_signal or "SELL",  # Default to SELL if still no signal found
             "price": current_price,
-            "reason": "No crossover detected",
+            "reason": f"No crossover detected - maintaining {self.current_signal or 'SELL'} signal",
             "timestamp": current_timestamp,
             "ema": current_ema,
             "sma": current_sma,
@@ -280,7 +295,7 @@ class SmaEmaCrossoverAlgo:
             
             if df.empty:
                 return {
-                    "signal": "ERROR",
+                    "signal": self.current_signal or "SELL",
                     "price": None,
                     "reason": "No data available",
                     "timestamp": None
@@ -296,9 +311,9 @@ class SmaEmaCrossoverAlgo:
         except Exception as e:
             self.logger.error(f"❌ Error getting signal for {symbol}: {e}")
             return {
-                "signal": "ERROR", 
+                "signal": self.current_signal or "SELL", 
                 "price": None, 
-                "reason": str(e),
+                "reason": f"Error: {str(e)}",
                 "timestamp": None
             }
     
@@ -318,6 +333,47 @@ class SmaEmaCrossoverAlgo:
         except Exception as e:
             self.logger.error(f"Error getting latest price for {symbol}: {e}")
             return None
+    
+    def _find_last_crossover_signal(self, df):
+        """
+        Look back through the data to find the most recent crossover signal.
+        
+        :param df: DataFrame with 'ema_9' and 'sma_21' columns
+        :return: 'BUY' or 'SELL' based on last crossover, or 'BUY' as default
+        """
+        if df.empty or len(df) < 2:
+            return "SELL"  # Default to SELL
+        
+        # Get valid data (non-NaN indicators)
+        valid_data = df.dropna(subset=['ema_9', 'sma_21'])
+        
+        if len(valid_data) < 2:
+            return "SELL"  # Default to SELL
+        
+        # Look through the data backwards to find the last crossover
+        for i in range(len(valid_data) - 1, 0, -1):
+            curr_ema_above_sma = valid_data['ema_9'].iloc[i] > valid_data['sma_21'].iloc[i]
+            prev_ema_above_sma = valid_data['ema_9'].iloc[i-1] > valid_data['sma_21'].iloc[i-1]
+            
+            # Found a crossover
+            if prev_ema_above_sma != curr_ema_above_sma:
+                if curr_ema_above_sma:
+                    self.logger.info("Found historical BUY crossover signal")
+                    return "BUY"
+                else:
+                    self.logger.info("Found historical SELL crossover signal")
+                    return "SELL"
+        
+        # No crossover found, determine signal based on current position
+        latest_ema = valid_data['ema_9'].iloc[-1]
+        latest_sma = valid_data['sma_21'].iloc[-1]
+        
+        if latest_ema > latest_sma:
+            self.logger.info("No crossover found - EMA above SMA, defaulting to BUY")
+            return "BUY"
+        else:
+            self.logger.info("No crossover found - EMA below SMA, defaulting to SELL")
+            return "SELL"
 
 
 def main():

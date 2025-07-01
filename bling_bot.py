@@ -128,7 +128,7 @@ class BlingBot:
         except Exception as e:
             self.logger.error(f"❌ Error getting signal: {e}")
             return {
-                'signal': 'ERROR',
+                'signal': 'SELL',  # Default to SELL signal on error
                 'price': None,
                 'reason': str(e),
                 'timestamp': None
@@ -202,9 +202,7 @@ class BlingBot:
             # Update current position
             current_position = self.get_open_position()
             
-            # Don't trade on ERROR or NONE signals
-            if signal['signal'] in ['ERROR', 'NONE']:
-                return False
+            # All signals are now either BUY or SELL, so we can process them
             
             # Handle BUY signal
             if signal['signal'] == 'BUY':
@@ -278,7 +276,7 @@ class BlingBot:
         except Exception as e:
             self.logger.error(f"❌ Error in trading cycle: {e}")
             return {
-                'signal': 'ERROR',
+                'signal': 'SELL',  # Default to SELL signal on error
                 'price': None,
                 'trade_executed': False,
                 'pnl': 0,
