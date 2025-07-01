@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-Test script for debugging the Polygon Data Fetcher.
+Test script f        fetcher = SmaEmaCrossoverAlgo()
+        logger.info("✅ SmaEmaCrossoverAlgo initialized successfully")
+        return fetcher
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize SmaEmaCrossoverAlgo: {e}")
+        return Noneugging the Polygon Data Fetcher.
 This script allows you to test the Polygon API integration and EMA/SMA calculations.
 """
 
@@ -9,10 +14,10 @@ import sys
 import logging
 from datetime import datetime
 
-# Add current directory to path to import polygon_data_fetcher
+# Add current directory to path to import sma_ema_crossover_algo
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from polygon_data_fetcher import PolygonDataFetcher
+from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
 
 # Configure logging
 logging.basicConfig(
@@ -37,12 +42,12 @@ def test_api_connection():
     logger.info(f"✅ API Key found: {api_key[:10]}...")
     
     try:
-        # Initialize fetcher
-        fetcher = PolygonDataFetcher()
-        logger.info("✅ PolygonDataFetcher initialized successfully")
+        # Initialize algorithm
+        fetcher = SmaEmaCrossoverAlgo()
+        logger.info("✅ SmaEmaCrossoverAlgo initialized successfully")
         return fetcher
     except Exception as e:
-        logger.error(f"❌ Failed to initialize PolygonDataFetcher: {e}")
+        logger.error(f"❌ Failed to initialize SmaEmaCrossoverAlgo: {e}")
         return False
 
 def test_data_fetching(fetcher, symbol="SPY"):

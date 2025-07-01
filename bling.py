@@ -14,7 +14,7 @@ logging.basicConfig(
 logger = logging.getLogger('bilbot')
 
 # Import our Polygon-based trading bot
-from polygon_trading_bot import PolygonTradingBot
+from bling_bot import BlingBot
 
 # Configuration
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 60))  # Seconds
@@ -23,7 +23,7 @@ SYMBOL = "SPY"  # Low-cost, liquid ETF
 nyse = pytz.timezone('America/New_York')
 
 # Initialize the Polygon-based trading bot with required parameters
-trading_algorithm = PolygonTradingBot(
+bling_bot = BlingBot(
     symbol=SYMBOL,
     interval_minutes=5,  # Recalculate signal every 5 minutes
     paper=True           # Use paper trading
@@ -41,11 +41,11 @@ def market_is_open():
     return market_open <= now <= market_close
 
 if __name__ == "__main__":
-    logger.info(f"Polygon Trading Bot starting at {pd.Timestamp.now(tz=nyse)}")
+    logger.info(f"Bling Bot starting at {pd.Timestamp.now(tz=nyse)}")
     logger.info(f"Symbol: {SYMBOL}")
 
     # Set initial equity
-    logger.info(f"💰 Initial equity: ${trading_algorithm.get_current_equity():.2f}")
+    logger.info(f"💰 Initial equity: ${bling_bot.get_current_equity():.2f}")
     
     trading_active = True
     
@@ -54,35 +54,34 @@ if __name__ == "__main__":
         # Check if market is open - bot's responsibility
         if not market_is_open():
             logger.info(f"Market is closed at {datetime.now(tz=nyse)}")
-            logger.info("Market is closed. Terminating the process.")
             # Exit all positions as a safety measure before terminating
-            trading_algorithm.exit_all_positions()
+            bling_bot.close_position()
             # Break out of the loop which will end the program
             break
             
         # Check risk limits - bot's responsibility
-        pnl = trading_algorithm.calculate_pnl()
-        if pnl <= -trading_algorithm.daily_pnl_threshold or pnl >= trading_algorithm.daily_gain_target:
+        pnl = bling_bot.calculate_pnl()
+        if pnl <= bling_bot.daily_pnl_threshold or pnl >= bling_bot.daily_gain_target:
             logger.info(f"Daily P&L limit reached: {pnl*100:.2f}%")
-            trading_algorithm.exit_all_positions()
+            bling_bot.close_position()
             trading_active = False
             break
         
         # Let the algorithm run its trading logic
         try:
-            trading_algorithm.run()
+            bling_bot.run()
         except Exception as e:
             logger.info(f"Error in trading cycle: {str(e)}")
             # Handle reconnection if needed
             if isinstance(e, OSError) and getattr(e, 'errno', None) == 9:  # Bad file descriptor
                 logger.info("Recreating Alpaca clients due to connection error...")
-                trading_algorithm.reconnect()
+                bling_bot.reconnect()
         
         time.sleep(CHECK_INTERVAL)
     
     # Clean up at end of day
-    trading_algorithm.exit_all_positions()
+    bling_bot.close_position()
     
     logger.info(f"Trading day complete at {pd.Timestamp.now(tz=nyse)}")
-    final_pnl = trading_algorithm.calculate_pnl()
+    final_pnl = bling_bot.calculate_pnl()
     logger.info(f"Daily P&L: {final_pnl*100:.2f}%")

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from polygon import RESTClient
 import time
 
-class PolygonDataFetcher:
+class SmaEmaCrossoverAlgo:
     """
     Fetch stock market data from Polygon API and calculate technical indicators.
     Detects EMA/SMA crossovers for trading signals.
@@ -13,7 +13,7 @@ class PolygonDataFetcher:
     
     def __init__(self, api_key=None):
         """
-        Initialize the Polygon data fetcher.
+        Initialize the SMA/EMA crossover algorithm.
         
         :param api_key: Polygon API key (if not provided, will look for POLYGON_API_KEY env var)
         """
@@ -322,7 +322,7 @@ class PolygonDataFetcher:
 
 def main():
     """
-    Example usage of the PolygonDataFetcher.
+    Example usage of the SmaEmaCrossoverAlgo.
     """
     # Check if API key is available
     if not os.getenv('POLYGON_API_KEY'):
@@ -330,22 +330,22 @@ def main():
         print("You can get a free API key from: https://polygon.io/")
         return
     
-    # Initialize fetcher
+    # Initialize algorithm
     try:
-        fetcher = PolygonDataFetcher()
+        algo = SmaEmaCrossoverAlgo()
     except Exception as e:
-        print(f"Failed to initialize Polygon fetcher: {e}")
+        print(f"Failed to initialize SMA/EMA crossover algorithm: {e}")
         return
     
     # Test symbols
     symbols = ['SPY', 'AAPL', 'MSFT', 'GOOGL']
     
     for symbol in symbols:
-        print(f"\n--- Analyzing {symbol} with Polygon API ---")
+        print(f"\n--- Analyzing {symbol} with SMA/EMA Crossover Algorithm ---")
         
         try:
             # Get signal (5-minute intervals)
-            signal = fetcher.get_signal(symbol, multiplier=5, days_back=3)
+            signal = algo.get_signal(symbol, multiplier=5, days_back=3)
             
             print(f"📊 Signal: {signal['signal']}")
             print(f"💰 Price: ${signal['price']:.2f}" if signal['price'] else "💰 Price: N/A")
@@ -353,8 +353,8 @@ def main():
             print(f"📝 Reason: {signal['reason']}")
             
             if 'ema' in signal and 'sma' in signal:
-                print(f"📈 EMA({fetcher.ema_period}): ${signal['ema']:.2f}")
-                print(f"📊 SMA({fetcher.sma_period}): ${signal['sma']:.2f}")
+                print(f"📈 EMA({algo.ema_period}): ${signal['ema']:.2f}")
+                print(f"📊 SMA({algo.sma_period}): ${signal['sma']:.2f}")
                 
                 if 'ema_above_sma' in signal:
                     trend = "🟢 Bullish" if signal['ema_above_sma'] else "🔴 Bearish"

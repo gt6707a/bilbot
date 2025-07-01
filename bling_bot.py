@@ -6,21 +6,22 @@ from datetime import datetime, timedelta
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
-from polygon_data_fetcher import PolygonDataFetcher
+from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
 
-class PolygonTradingBot:
+class BlingBot:
     """
-    Trading bot that uses Polygon for market data/signals and Alpaca for trade execution.
+    Trading bot that uses SMA/EMA crossover algorithm for signals and Alpaca for trade execution.
+    Uses simple equity tracking: starts with initial_value, only updates on realized P&L.
     Implements the same interface as SmaEmaCrossoverAlgorithm for drop-in replacement.
     """
     
-    def __init__(self, symbol, interval_minutes=5, initial_equity=1000, paper=True):
+    def __init__(self, symbol, interval_minutes=5, initial_value=1000, paper=True):
         """
         Initialize the Polygon-based trading bot.
         
         :param symbol: The trading symbol (e.g., 'SPY')
         :param interval_minutes: How often (in minutes) to recalculate the signal
-        :param initial_equity: Dollar amount to begin the day with
+        :param initial_value: Dollar amount to begin the day with
         :param paper: Whether to use paper trading
         """
         # Configure logging
@@ -34,8 +35,8 @@ class PolygonTradingBot:
         # Trading parameters
         self.symbol = symbol
         self.interval_minutes = interval_minutes
-        self.initial_equity = initial_equity
-        self.current_equity = initial_equity
+        self.initial_value = initial_value
+        self.current_value = initial_value
         self.paper = paper
         
         # Risk management
@@ -49,12 +50,12 @@ class PolygonTradingBot:
         # Current position tracking
         self.current_position = 0
         
-        # Initialize Polygon data fetcher
+        # Initialize SMA/EMA crossover algorithm
         try:
-            self.polygon_fetcher = PolygonDataFetcher()
-            self.logger.info("✅ Polygon data fetcher initialized")
+            self.algo = SmaEmaCrossoverAlgo()
+            self.logger.info("✅ SMA/EMA crossover algorithm initialized")
         except Exception as e:
-            self.logger.error(f"❌ Failed to initialize Polygon fetcher: {e}")
+            self.logger.error(f"❌ Failed to initialize SMA/EMA algorithm: {e}")
             raise
         
         # Initialize Alpaca trading client
@@ -75,11 +76,8 @@ class PolygonTradingBot:
             self.logger.error(f"❌ Failed to initialize Alpaca client: {e}")
             raise
         
-        # Update initial equity and position
-        self._update_account_info()
-        
-        self.logger.info(f"🤖 PolygonTradingBot initialized for {symbol}")
-        self.logger.info(f"   Initial equity: ${self.current_equity:.2f}")
+        self.logger.info(f"🤖 BlingBot initialized for {symbol}")
+        self.logger.info(f"   Initial value: ${self.current_value:.2f}")
         self.logger.info(f"   Signal interval: {interval_minutes} minutes")
         self.logger.info(f"   Trading mode: {'Paper' if paper else 'Live'}")
     
@@ -104,32 +102,15 @@ class PolygonTradingBot:
         time_since_last = datetime.now() - self.last_signal_time
         return time_since_last.total_seconds() >= (self.interval_minutes * 60)
     
-    def _update_account_info(self):
-        """Update current equity and position from Alpaca"""
-        try:
-            # Get account info
-            account = self.trading_client.get_account()
-            self.current_equity = float(account.equity)
-            
-            # Get current position
-            try:
-                position = self.trading_client.get_open_position(self.symbol)
-                self.current_position = float(position.qty)
-                self.logger.debug(f"Current position: {self.current_position} shares")
-            except Exception:
-                # No position exists
-                self.current_position = 0
-                
-        except Exception as e:
-            self.logger.error(f"❌ Error updating account info: {e}")
+
     
     def get_signal(self):
-        """Get fresh trading signal from Polygon"""
+        """Get fresh trading signal from SMA/EMA crossover algorithm"""
         try:
             self.logger.info(f"🔄 Fetching fresh signal for {self.symbol}")
             
-            # Get signal from Polygon
-            signal_info = self.polygon_fetcher.get_signal(
+            # Get signal from SMA/EMA crossover algorithm
+            signal_info = self.algo.get_signal(
                 symbol=self.symbol,
                 timespan='minute',
                 multiplier=5,  # 5-minute intervals
@@ -160,63 +141,55 @@ class PolygonTradingBot:
         return self.cached_signal
     
     def get_current_equity(self):
-        """Get current equity value"""
-        self._update_account_info()
-        return float(self.current_equity)
+        """Get current per-symbol value"""
+        self.get_open_position()
+        return float(self.current_value)
     
     def calculate_pnl(self):
         """Calculate daily P&L percentage"""
-        current_equity = self.get_current_equity()
-        return (current_equity - self.initial_equity) / self.initial_equity
-    
-    def exit_all_positions(self):
-        """Liquidate all positions"""
-        try:
-            self.trading_client.close_all_positions(cancel_orders=True)
-            self.logger.info("✅ Closed all positions")
-        except Exception as e:
-            self.logger.error(f"❌ Error closing positions: {e}")
+        return (self.current_value - self.initial_value) / self.initial_value
     
     def get_open_position(self):
         """
-        Get current open position for the symbol.
+        Get current open position for the symbol and update current_position and current_value.
         Returns position quantity or 0 if no position exists.
         """
         try:
             position = self.trading_client.get_open_position(self.symbol)
             qty = float(position.qty)
             self.current_position = qty
-            self.logger.debug(f"Open position: {qty} shares")
+            
+            # Update current_value using market_value from position
+            if position.market_value:
+                market_value = float(position.market_value)
+                self.current_value = abs(market_value)  # Use abs for short positions
+                self.logger.debug(f"Open position: {qty} shares, Market value: ${market_value:.2f}")
+                self.logger.debug(f"Updated current value: ${self.current_value:.2f}")
+            else:
+                self.logger.debug(f"Open position: {qty} shares (no market value)")
+            
             return qty
         except Exception:
-            # No position exists
+            # No position exists - reset to initial value
             self.current_position = 0
+            self.current_value = self.initial_value
+            self.logger.debug("No open position - reset to initial value")
             return 0
     
     def close_position(self):
-        """Close current position"""
+        """Close current position using Alpaca's close_position method"""
         try:
-            if self.current_position == 0:
-                self.logger.info("No position to close")
-                return False
+            # Use Alpaca's close_position method - it handles checking if position exists
+            close_response = self.trading_client.close_position(symbol_or_asset_id=self.symbol)
             
-            # Determine order side
-            side = OrderSide.SELL if self.current_position > 0 else OrderSide.BUY
-            qty = abs(self.current_position)
+            if hasattr(close_response, 'order_id') and close_response.order_id:
+                self.logger.info(f"✅ Position close order submitted: {close_response.order_id}")
+            else:
+                self.logger.info(f"✅ Position close request submitted for {self.symbol}")
             
-            # Create market order to close position
-            order_data = MarketOrderRequest(
-                symbol=self.symbol,
-                qty=qty,
-                side=side,
-                time_in_force=TimeInForce.GTC
-            )
-            
-            order = self.trading_client.submit_order(order_data=order_data)
-            self.logger.info(f"✅ Submitted close order: {side.value} {qty} shares of {self.symbol}")
-            
-            # Update position
+            # Reset position tracking - current_value will be updated on next get_open_position call
             self.current_position = 0
+            
             return True
             
         except Exception as e:
@@ -233,53 +206,32 @@ class PolygonTradingBot:
             if signal['signal'] in ['ERROR', 'NONE']:
                 return False
             
-            # Calculate position size (simple: use 90% of equity)
-            current_equity = self.get_current_equity()
-            position_value = current_equity * 0.9
-            
-            if signal['price'] is None or signal['price'] <= 0:
-                self.logger.warning("Invalid price in signal, cannot execute trade")
-                return False
-            
-            shares_to_trade = int(position_value / signal['price'])
-            
-            if shares_to_trade <= 0:
-                self.logger.warning("Insufficient equity to trade")
-                return False
-            
             # Handle BUY signal
             if signal['signal'] == 'BUY':
-                if current_position >= 0:  # Not short, can buy
+                if current_position == 0:  # No position, can buy
                     order_data = MarketOrderRequest(
                         symbol=self.symbol,
-                        qty=shares_to_trade,
+                        notional=str(self.current_value),
                         side=OrderSide.BUY,
                         time_in_force=TimeInForce.GTC
                     )
                     
-                    order = self.trading_client.submit_order(order_data=order_data)
-                    self.logger.info(f"✅ BUY order submitted: {shares_to_trade} shares of {self.symbol} at ${signal['price']:.2f}")
+                    self.trading_client.submit_order(order_data=order_data)
+                    self.logger.info(f"✅ BUY order submitted: ${self.current_value:.2f} of {self.symbol}")
                     return True
                 else:
-                    # Close short position first
-                    return self.close_position()
-            
+                    self.logger.info(f"Already have position of {current_position} shares, skipping BUY")
+                    return False
+
             # Handle SELL signal
             elif signal['signal'] == 'SELL':
                 if current_position > 0:  # Have long position, can sell
+                    self.logger.info(f"SELL signal received, closing position of {current_position} shares")
                     return self.close_position()
-                elif current_position == 0:  # No position, can short
-                    order_data = MarketOrderRequest(
-                        symbol=self.symbol,
-                        qty=shares_to_trade,
-                        side=OrderSide.SELL,
-                        time_in_force=TimeInForce.GTC
-                    )
-                    
-                    order = self.trading_client.submit_order(order_data=order_data)
-                    self.logger.info(f"✅ SELL order submitted: {shares_to_trade} shares of {self.symbol} at ${signal['price']:.2f}")
-                    return True
-            
+                else:
+                    self.logger.info(f"No position to sell for {self.symbol}")
+                    return False
+
             return False
             
         except Exception as e:
@@ -289,8 +241,8 @@ class PolygonTradingBot:
     def run(self):
         """Run one trading cycle"""
         try:
-            # Update account info
-            self._update_account_info()
+            # Update position info and per-symbol equity
+            self.get_open_position()
             
             # Check if we need to recalculate the signal
             if not self._should_recalculate():
@@ -301,6 +253,7 @@ class PolygonTradingBot:
                     'price': cached_signal.get('price'),
                     'trade_executed': False,
                     'pnl': self.calculate_pnl() * 100,  # Return as percentage
+                    'per_symbol_value': self.current_value,
                     'recalculated': False
                 }
             
@@ -318,6 +271,7 @@ class PolygonTradingBot:
                 'price': signal.get('price'),
                 'trade_executed': trade_executed,
                 'pnl': self.calculate_pnl() * 100,  # Return as percentage
+                'per_symbol_value': self.current_value,
                 'recalculated': True
             }
             
@@ -328,5 +282,6 @@ class PolygonTradingBot:
                 'price': None,
                 'trade_executed': False,
                 'pnl': 0,
+                'per_symbol_value': self.current_value,
                 'recalculated': False
             }
