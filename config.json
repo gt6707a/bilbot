@@ -22,37 +22,13 @@
       "symbol": "QQQ",
       "algorithm": "sma_ema_crossover",
       "interval_minutes": 10,
-      "initial_value": 2000,
+      "initial_value": 1000,
       "signal_timespan": "minute",
       "signal_multiplier": 15,
       "signal_days_back": 5,
-      "daily_pnl_threshold": -0.03,
-      "daily_gain_target": 0.08,
+      "daily_pnl_threshold": -0.05,
+      "daily_gain_target": 0.1,
       "description": "NASDAQ ETF with moderate 10-minute intervals"
-    },
-    {
-      "symbol": "AAPL",
-      "algorithm": "sma_ema_crossover",
-      "interval_minutes": 15,
-      "initial_value": 1500,
-      "signal_timespan": "minute",
-      "signal_multiplier": 30,
-      "signal_days_back": 2,
-      "daily_pnl_threshold": -0.04,
-      "daily_gain_target": 0.12,
-      "description": "Apple stock with longer 15-minute intervals"
-    },
-    {
-      "symbol": "TSLA",
-      "algorithm": "sma_ema_crossover",
-      "interval_minutes": 3,
-      "initial_value": 800,
-      "signal_timespan": "minute",
-      "signal_multiplier": 3,
-      "signal_days_back": 1,
-      "daily_pnl_threshold": -0.06,
-      "daily_gain_target": 0.15,
-      "description": "Tesla stock with aggressive 3-minute intervals for high volatility"
     }
   ]
 }
