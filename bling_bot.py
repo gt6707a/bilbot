@@ -10,19 +10,26 @@ from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
 
 class BlingBot:
     """
-    Trading bot that uses SMA/EMA crossover algorithm for signals and Alpaca for trade execution.
-    Uses simple equity tracking: starts with initial_value, only updates on realized P&L.
-    Implements the same interface as SmaEmaCrossoverAlgorithm for drop-in replacement.
+    Trading bot that uses pluggable trading algorithms for signal generation and Alpaca for trade execution.
+    Uses per-symbol value tracking: starts with initial_value, updates based on position market value.
     """
     
-    def __init__(self, symbol, interval_minutes=5, initial_value=1000, paper=True):
+    def __init__(self, symbol, interval_minutes=5, initial_value=1000, paper=True, algorithm=None, 
+                 signal_timespan='minute', signal_multiplier=5, signal_days_back=3,
+                 daily_pnl_threshold=-0.05, daily_gain_target=0.10):
         """
-        Initialize the Polygon-based trading bot.
+        Initialize the trading bot.
         
         :param symbol: The trading symbol (e.g., 'SPY')
         :param interval_minutes: How often (in minutes) to recalculate the signal
         :param initial_value: Dollar amount to begin the day with
         :param paper: Whether to use paper trading
+        :param algorithm: Trading algorithm instance (defaults to SmaEmaCrossoverAlgo)
+        :param signal_timespan: Timespan for signal calculation ('minute', 'hour', 'day')
+        :param signal_multiplier: Multiplier for timespan (5 for 5-minute intervals)
+        :param signal_days_back: Number of days of data to use for signal calculation
+        :param daily_pnl_threshold: Daily loss limit (negative value, e.g., -0.05 for -5%)
+        :param daily_gain_target: Daily gain target (positive value, e.g., 0.10 for 10%)
         """
         # Configure logging
         self.logger = logging.getLogger(__name__)
@@ -39,9 +46,14 @@ class BlingBot:
         self.current_value = initial_value
         self.paper = paper
         
+        # Signal parameters
+        self.signal_timespan = signal_timespan
+        self.signal_multiplier = signal_multiplier
+        self.signal_days_back = signal_days_back
+        
         # Risk management
-        self.daily_pnl_threshold = -0.05  # -5% daily loss limit
-        self.daily_gain_target = 0.10     # 10% daily gain target
+        self.daily_pnl_threshold = daily_pnl_threshold
+        self.daily_gain_target = daily_gain_target
         
         # Signal caching
         self.last_signal_time = None
@@ -50,12 +62,12 @@ class BlingBot:
         # Current position tracking
         self.current_position = 0
         
-        # Initialize SMA/EMA crossover algorithm
+        # Initialize trading algorithm
         try:
-            self.algo = SmaEmaCrossoverAlgo()
-            self.logger.info("✅ SMA/EMA crossover algorithm initialized")
+            self.algo = algorithm or SmaEmaCrossoverAlgo()
+            self.logger.info("✅ Trading algorithm initialized")
         except Exception as e:
-            self.logger.error(f"❌ Failed to initialize SMA/EMA algorithm: {e}")
+            self.logger.error(f"❌ Failed to initialize trading algorithm: {e}")
             raise
         
         # Initialize Alpaca trading client
@@ -79,6 +91,8 @@ class BlingBot:
         self.logger.info(f"🤖 BlingBot initialized for {symbol}")
         self.logger.info(f"   Initial value: ${self.current_value:.2f}")
         self.logger.info(f"   Signal interval: {interval_minutes} minutes")
+        self.logger.info(f"   Signal parameters: {signal_multiplier}-{signal_timespan}, {signal_days_back} days back")
+        self.logger.info(f"   Risk management: {daily_pnl_threshold*100:.1f}% loss limit, {daily_gain_target*100:.1f}% gain target")
         self.logger.info(f"   Trading mode: {'Paper' if paper else 'Live'}")
     
     def reconnect(self):
@@ -102,19 +116,17 @@ class BlingBot:
         time_since_last = datetime.now() - self.last_signal_time
         return time_since_last.total_seconds() >= (self.interval_minutes * 60)
     
-
-    
     def get_signal(self):
-        """Get fresh trading signal from SMA/EMA crossover algorithm"""
+        """Get fresh trading signal from the configured algorithm"""
         try:
             self.logger.info(f"🔄 Fetching fresh signal for {self.symbol}")
             
-            # Get signal from SMA/EMA crossover algorithm
+            # Get signal from trading algorithm
             signal_info = self.algo.get_signal(
                 symbol=self.symbol,
-                timespan='minute',
-                multiplier=5,  # 5-minute intervals
-                days_back=3    # 3 days of data
+                timespan=self.signal_timespan,
+                multiplier=self.signal_multiplier,
+                days_back=self.signal_days_back
             )
             
             # Cache the signal
@@ -202,7 +214,7 @@ class BlingBot:
             # Update current position
             current_position = self.get_open_position()
             
-            # All signals are now either BUY or SELL, so we can process them
+            # Process BUY and SELL signals
             
             # Handle BUY signal
             if signal['signal'] == 'BUY':
@@ -211,7 +223,7 @@ class BlingBot:
                         symbol=self.symbol,
                         notional=str(self.current_value),
                         side=OrderSide.BUY,
-                        time_in_force=TimeInForce.GTC
+                        time_in_force=TimeInForce.DAY
                     )
                     
                     self.trading_client.submit_order(order_data=order_data)

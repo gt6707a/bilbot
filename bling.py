@@ -1,33 +1,64 @@
 import os
 import time
+import json
 import pandas as pd
 import pytz
 import holidays
 import logging
 from datetime import datetime
+from threading import Thread
 
-# Set up logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger('bilbot')
-
-# Import our Polygon-based trading bot
+# Import our trading bot and algorithms
 from bling_bot import BlingBot
+from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
 
-# Configuration
-CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 60))  # Seconds
-SYMBOL = "SPY"  # Low-cost, liquid ETF
-
+# Timezone for NYSE
 nyse = pytz.timezone('America/New_York')
 
-# Initialize the Polygon-based trading bot with required parameters
-bling_bot = BlingBot(
-    symbol=SYMBOL,
-    interval_minutes=5,  # Recalculate signal every 5 minutes
-    paper=True           # Use paper trading
-)
+# Algorithm registry for easy lookup
+ALGORITHMS = {
+    'sma_ema_crossover': SmaEmaCrossoverAlgo
+}
+
+def load_config(config_path='config.json'):
+    """Load configuration from JSON file"""
+    with open(config_path, 'r') as f:
+        return json.load(f)
+
+def setup_logging(log_level='INFO'):
+    """Setup logging configuration"""
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    return logging.getLogger('bilbot')
+
+def create_algorithm(algorithm_name):
+    """Create algorithm instance from name"""
+    if algorithm_name not in ALGORITHMS:
+        raise ValueError(f"Unknown algorithm: {algorithm_name}. Available: {list(ALGORITHMS.keys())}")
+    return ALGORITHMS[algorithm_name]()
+
+def create_bot_from_config(bot_config):
+    """Create a BlingBot instance from configuration"""
+    # Create algorithm instance
+    algorithm = create_algorithm(bot_config['algorithm'])
+    
+    # Create bot with all parameters from config
+    bot = BlingBot(
+        symbol=bot_config['symbol'],
+        interval_minutes=bot_config['interval_minutes'],
+        initial_value=bot_config['initial_value'],
+        signal_timespan=bot_config['signal_timespan'],
+        signal_multiplier=bot_config['signal_multiplier'],
+        signal_days_back=bot_config['signal_days_back'],
+        daily_pnl_threshold=bot_config['daily_pnl_threshold'],
+        daily_gain_target=bot_config['daily_gain_target'],
+        algorithm=algorithm,
+        paper=True  # Always use paper trading for safety
+    )
+    
+    return bot
 
 def market_is_open():
     """Check if market is open using NYSE hours and holidays"""
@@ -40,12 +71,10 @@ def market_is_open():
     market_close = now.replace(hour=16, minute=0, second=0, microsecond=0)
     return market_open <= now <= market_close
 
-if __name__ == "__main__":
-    logger.info(f"Bling Bot starting at {pd.Timestamp.now(tz=nyse)}")
-    logger.info(f"Symbol: {SYMBOL}")
-
-    # Set initial equity
-    logger.info(f"💰 Initial equity: ${bling_bot.get_current_equity():.2f}")
+def run_bot(bot, logger, check_interval):
+    """Run a single bot's trading logic"""
+    logger.info(f"Starting bot for {bot.symbol}")
+    logger.info(f"💰 Initial equity: ${bot.get_current_equity():.2f}")
     
     trading_active = True
     
@@ -53,35 +82,80 @@ if __name__ == "__main__":
     while trading_active:
         # Check if market is open - bot's responsibility
         if not market_is_open():
-            logger.info(f"Market is closed at {datetime.now(tz=nyse)}")
+            logger.info(f"Market is closed at {datetime.now(tz=nyse)} for {bot.symbol}")
             # Exit all positions as a safety measure before terminating
-            bling_bot.close_position()
+            bot.close_position()
             # Break out of the loop which will end the program
             break
             
         # Check risk limits - bot's responsibility
-        pnl = bling_bot.calculate_pnl()
-        if pnl <= bling_bot.daily_pnl_threshold or pnl >= bling_bot.daily_gain_target:
-            logger.info(f"Daily P&L limit reached: {pnl*100:.2f}%")
-            bling_bot.close_position()
+        pnl = bot.calculate_pnl()
+        if pnl <= bot.daily_pnl_threshold or pnl >= bot.daily_gain_target:
+            logger.info(f"Daily P&L limit reached for {bot.symbol}: {pnl*100:.2f}%")
+            bot.close_position()
             trading_active = False
             break
         
         # Let the algorithm run its trading logic
         try:
-            bling_bot.run()
+            bot.run()
         except Exception as e:
-            logger.info(f"Error in trading cycle: {str(e)}")
+            logger.info(f"Error in trading cycle for {bot.symbol}: {str(e)}")
             # Handle reconnection if needed
             if isinstance(e, OSError) and getattr(e, 'errno', None) == 9:  # Bad file descriptor
-                logger.info("Recreating Alpaca clients due to connection error...")
-                bling_bot.reconnect()
+                logger.info(f"Recreating Alpaca clients for {bot.symbol} due to connection error...")
+                bot.reconnect()
         
-        time.sleep(CHECK_INTERVAL)
+        time.sleep(check_interval)
     
     # Clean up at end of day
-    bling_bot.close_position()
+    bot.close_position()
     
-    logger.info(f"Trading day complete at {pd.Timestamp.now(tz=nyse)}")
-    final_pnl = bling_bot.calculate_pnl()
-    logger.info(f"Daily P&L: {final_pnl*100:.2f}%")
+    logger.info(f"Trading day complete for {bot.symbol} at {pd.Timestamp.now(tz=nyse)}")
+    final_pnl = bot.calculate_pnl()
+    logger.info(f"Daily P&L for {bot.symbol}: {final_pnl*100:.2f}%")
+
+def run_multiple_bots(config):
+    """Run multiple bots concurrently"""
+    logger = setup_logging(config['global_settings']['log_level'])
+    check_interval = config['global_settings']['check_interval']
+    
+    logger.info(f"Bling Bot system starting at {pd.Timestamp.now(tz=nyse)}")
+    logger.info(f"Running {len(config['bots'])} bots")
+    
+    # Create all bots from configuration
+    bots = []
+    for bot_config in config['bots']:
+        try:
+            bot = create_bot_from_config(bot_config)
+            bots.append(bot)
+            logger.info(f"Created bot for {bot_config['symbol']} using {bot_config['algorithm']} algorithm")
+        except Exception as e:
+            logger.error(f"Failed to create bot for {bot_config['symbol']}: {e}")
+    
+    if not bots:
+        logger.error("No bots created successfully. Exiting.")
+        return
+    
+    # Start threads for each bot
+    threads = []
+    for bot in bots:
+        thread = Thread(target=run_bot, args=(bot, logger, check_interval))
+        thread.daemon = True
+        threads.append(thread)
+        thread.start()
+    
+    # Wait for all threads to complete
+    for thread in threads:
+        thread.join()
+    
+    logger.info("All bots have completed trading.")
+
+if __name__ == "__main__":
+    try:
+        config = load_config()
+        run_multiple_bots(config)
+    except Exception as e:
+        logger = setup_logging()
+        logger.error(f"Failed to start bot system: {e}")
+        raise
