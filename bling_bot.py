@@ -223,7 +223,7 @@ class BlingBot:
                         symbol=self.symbol,
                         notional=str(self.current_value),
                         side=OrderSide.BUY,
-                        time_in_force=TimeInForce.GTC
+                        time_in_force=TimeInForce.DAY
                     )
                     
                     self.trading_client.submit_order(order_data=order_data)
