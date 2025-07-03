@@ -166,15 +166,12 @@ class SmaEmaCrossoverAlgo:
             self.logger.error(f"❌ Error getting current indicators for {symbol}: {e}")
             return None
     
-    def get_signal(self, symbol, timespan='minute', multiplier=5, days_back=5):
+    def get_signal(self, symbol):
         """
         Get trading signal for a symbol based on EMA/SMA crossover.
         Uses direct Polygon API calls for current indicators instead of fetching aggregates.
         
         :param symbol: Stock symbol
-        :param timespan: Timespan for aggregates (used for fallback only)
-        :param multiplier: Multiplier for timespan (used for fallback only)
-        :param days_back: Days to look back (used for fallback only)
         :return: Dict with signal information
         """
         try:
