@@ -7,6 +7,7 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
+from config_manager import ConfigManager
 
 class BlingBot:
     """
@@ -62,6 +63,18 @@ class BlingBot:
         # Current position tracking
         self.current_position = 0
         
+        # Initialize config manager for value persistence
+        self.config_manager = ConfigManager()
+        
+        # Load persisted current value if available, otherwise use initial_value
+        persisted_value = self.config_manager.get_current_value(symbol)
+        if persisted_value is not None:
+            self.current_value = persisted_value
+            self.logger.info(f"Loaded persisted current value: ${self.current_value:.2f}")
+        else:
+            self.current_value = initial_value
+            self.logger.info(f"No persisted value found, using initial value: ${self.current_value:.2f}")
+        
         # Initialize trading algorithm
         try:
             self.algo = algorithm or SmaEmaCrossoverAlgo()
@@ -88,12 +101,42 @@ class BlingBot:
             self.logger.error(f"❌ Failed to initialize Alpaca client: {e}")
             raise
         
+        # Initialize config manager for persistent storage
+        self.config_manager = ConfigManager('blingbot_config.json')
+        self.load_config()
+        
         self.logger.info(f"🤖 BlingBot initialized for {symbol}")
         self.logger.info(f"   Initial value: ${self.current_value:.2f}")
         self.logger.info(f"   Signal interval: {interval_minutes} minutes")
         self.logger.info(f"   Signal parameters: {signal_multiplier}-{signal_timespan}, {signal_days_back} days back")
         self.logger.info(f"   Risk management: {daily_pnl_threshold*100:.1f}% loss limit, {daily_gain_target*100:.1f}% gain target")
         self.logger.info(f"   Trading mode: {'Paper' if paper else 'Live'}")
+    
+    def load_config(self):
+        """Load configuration from file"""
+        try:
+            config = self.config_manager.load_config()
+            self.current_value = config.get('current_value', self.initial_value)
+            self.logger.info(f"🔧 Config loaded: current_value=${self.current_value:.2f}")
+        except Exception as e:
+            self.logger.warning(f"❌ Error loading config: {e} - using initial values")
+    
+    def save_config(self):
+        """Save configuration to file"""
+        try:
+            self.config_manager.save_config({
+                'current_value': self.current_value
+            })
+            self.logger.info("💾 Config saved")
+        except Exception as e:
+            self.logger.error(f"❌ Error saving config: {e}")
+    
+    def _update_current_value(self, new_value):
+        """Update current_value and persist to config"""
+        if abs(new_value - self.current_value) > 0.01:  # Only update if significant change
+            self.current_value = new_value
+            self.config_manager.update_current_value(self.symbol, new_value)
+            self.logger.debug(f"Updated and persisted current value: ${self.current_value:.2f}")
     
     def reconnect(self):
         """Reconnect to Alpaca API (for error recovery)"""
@@ -171,9 +214,9 @@ class BlingBot:
             # Update current_value using market_value from position
             if position.market_value:
                 market_value = float(position.market_value)
-                self.current_value = abs(market_value)  # Use abs for short positions
+                new_value = abs(market_value)  # Use abs for short positions
+                self._update_current_value(new_value)
                 self.logger.debug(f"Open position: {qty} shares, Market value: ${market_value:.2f}")
-                self.logger.debug(f"Updated current value: ${self.current_value:.2f}")
             else:
                 self.logger.debug(f"Open position: {qty} shares (no market value)")
             
@@ -181,7 +224,7 @@ class BlingBot:
         except Exception:
             # No position exists - reset to initial value
             self.current_position = 0
-            self.current_value = self.initial_value
+            self._update_current_value(self.initial_value)
             self.logger.debug("No open position - reset to initial value")
             return 0
     
@@ -267,9 +310,6 @@ class BlingBot:
             
             # Execute trade based on signal
             trade_executed = self.execute_trade(signal)
-            
-            # Add small delay to avoid rate limiting
-            time.sleep(0.5)
             
             return {
                 'signal': signal['signal'],

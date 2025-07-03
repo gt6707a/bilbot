@@ -36,7 +36,7 @@ def setup_logging(log_level='INFO'):
 def create_algorithm(algorithm_name):
     """Create algorithm instance from name"""
     if algorithm_name not in ALGORITHMS:
-        raise ValueError(f"Unknown algorithm: {algorithm_name}. Available: {list(ALGORITHMS.keys())}")
+        raise ValueError(f"Unknown algorithm: {algorithm_name}.")
     return ALGORITHMS[algorithm_name]()
 
 def create_bot_from_config(bot_config):
@@ -48,7 +48,7 @@ def create_bot_from_config(bot_config):
     bot = BlingBot(
         symbol=bot_config['symbol'],
         interval_minutes=bot_config['interval_minutes'],
-        initial_value=bot_config['initial_value'],
+        initial_value=bot_config['current_value'],
         signal_timespan=bot_config['signal_timespan'],
         signal_multiplier=bot_config['signal_multiplier'],
         signal_days_back=bot_config['signal_days_back'],
