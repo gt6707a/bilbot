@@ -45,335 +45,199 @@ class SmaEmaCrossoverAlgo:
         # Signal state tracking
         self.current_signal = None  # Will be 'BUY' or 'SELL'
         
-    def fetch_aggregates(self, symbol, timespan='minute', multiplier=5, days_back=5):
+    def get_sma(self, symbol, window=5, limit=21):
         """
-        Fetch aggregate data from Polygon.
+        Get Simple Moving Average values from Polygon API at 5-minute intervals.
+        Fetches 21 SMA values and returns their mean.
         
         :param symbol: Stock symbol (e.g., 'SPY', 'AAPL')
-        :param timespan: Timespan for aggregates ('minute', 'hour', 'day')
-        :param multiplier: Multiplier for timespan (5 for 5-minute intervals)
-        :param days_back: Number of days to look back
-        :return: DataFrame with OHLCV data
+        :param window: SMA window/period for 5-minute intervals (default: 5)
+        :param limit: Number of SMA values to fetch (default: 21)
+        :return: Mean of SMA values or None
         """
-        # Calculate date range
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days_back)
-        
-        # Format dates for Polygon API (YYYY-MM-DD)
-        start_date_str = start_date.strftime('%Y-%m-%d')
-        end_date_str = end_date.strftime('%Y-%m-%d')
-        
-        self.logger.info(f"Fetching {multiplier}-{timespan} aggregates for {symbol}")
-        self.logger.info(f"Date range: {start_date_str} to {end_date_str}")
-        
         try:
-            # Fetch aggregates
-            aggs = self.client.get_aggs(
+            self.logger.info(f"Fetching {limit} SMA({window}) values at 5-minute intervals for {symbol}")
+            
+            # Use Polygon's SMA endpoint with 5-minute intervals
+            sma_response = self.client.get_sma(
                 ticker=symbol,
-                multiplier=multiplier,
-                timespan=timespan,
-                from_=start_date_str,
-                to=end_date_str,
+                timespan='minute',
                 adjusted=True,
-                sort="asc",
-                limit=50000  # Max limit to get all data
+                window=window,  # 5-minute window
+                series_type='close',
+                order='desc',  # Get most recent values first
+                limit=limit    # Fetch 21 values
             )
             
-            # Convert to DataFrame
-            data = []
-            for agg in aggs:
-                data.append({
-                    'timestamp': pd.to_datetime(agg.timestamp, unit='ms'),
-                    'open': float(agg.open),
-                    'high': float(agg.high),
-                    'low': float(agg.low),
-                    'close': float(agg.close),
-                    'volume': int(agg.volume),
-                    'vwap': float(getattr(agg, 'vwap', 0)) or None,
-                    'transactions': int(getattr(agg, 'transactions', 0)) or None
-                })
-            
-            if not data:
-                self.logger.warning(f"No data received for {symbol}")
-                return pd.DataFrame()
-            
-            df = pd.DataFrame(data)
-            
-            # Sort by timestamp
-            df = df.sort_values('timestamp').reset_index(drop=True)
-            
-            self.logger.info(f"✅ Fetched {len(df)} aggregates for {symbol}")
-            self.logger.info(f"Data range: {df['timestamp'].min()} to {df['timestamp'].max()}")
-            
-            return df
-            
+            # Extract SMA values from response
+            sma_values = []
+            if hasattr(sma_response, 'values') and sma_response.values:
+                for item in sma_response.values:
+                    sma_values.append(float(item.value))
+                
+                if sma_values and len(sma_values) == limit:
+                    # Calculate mean of the 21 SMA values
+                    mean_sma = sum(sma_values) / len(sma_values)
+                    
+                    self.logger.info(f"✅ Fetched {len(sma_values)} SMA values, mean SMA: ${mean_sma:.2f}")
+                    return mean_sma
+                else:
+                    self.logger.warning(f"Expected {limit} SMA values but got {len(sma_values)} for {symbol}")
+                    return None
+            else:
+                self.logger.warning(f"No SMA data returned from Polygon for {symbol}")
+                return None
+                
         except Exception as e:
-            self.logger.error(f"❌ Error fetching data for {symbol}: {e}")
-            return pd.DataFrame()
+            self.logger.error(f"❌ Error fetching SMA from Polygon for {symbol}: {e}")
+            return None
     
-    def calculate_sma(self, df, period=None, column='close'):
+    def get_ema(self, symbol, window=5, limit=9):
         """
-        Calculate Simple Moving Average.
+        Get Exponential Moving Average values from Polygon API at 5-minute intervals.
+        Fetches 9 EMA values and returns their mean.
         
-        :param df: DataFrame with price data
-        :param period: SMA period (default: self.sma_period)
-        :param column: Column to calculate SMA on
-        :return: Series with SMA values
+        :param symbol: Stock symbol (e.g., 'SPY', 'AAPL')
+        :param window: EMA window/period for 5-minute intervals (default: 5)
+        :param limit: Number of EMA values to fetch (default: 9)
+        :return: Mean of EMA values or None
         """
-        if period is None:
-            period = self.sma_period
-        
-        return df[column].rolling(window=period).mean()
-    
-    def calculate_ema(self, df, period=None, column='close'):
-        """
-        Calculate Exponential Moving Average.
-        
-        :param df: DataFrame with price data
-        :param period: EMA period (default: self.ema_period)
-        :param column: Column to calculate EMA on
-        :return: Series with EMA values
-        """
-        if period is None:
-            period = self.ema_period
-        
-        return df[column].ewm(span=period, adjust=False).mean()
-    
-    def add_technical_indicators(self, df):
-        """
-        Add EMA and SMA indicators to the DataFrame.
-        
-        :param df: DataFrame with OHLCV data
-        :return: DataFrame with added indicators
-        """
-        if df.empty:
-            return df
-        
-        # Calculate indicators
-        df['sma_21'] = self.calculate_sma(df, self.sma_period)
-        df['ema_9'] = self.calculate_ema(df, self.ema_period)
-        
-        # Log indicator statistics
-        valid_sma = df['sma_21'].notna().sum()
-        valid_ema = df['ema_9'].notna().sum()
-        
-        self.logger.info(f"Technical indicators calculated:")
-        self.logger.info(f"  SMA({self.sma_period}): {valid_sma} valid values")
-        self.logger.info(f"  EMA({self.ema_period}): {valid_ema} valid values")
-        
-        return df
-    
-    def detect_crossover(self, df):
-        """
-        Detect EMA/SMA crossover signals.
-        Only returns BUY when EMA crosses above SMA, SELL when EMA crosses below SMA.
-        Maintains the last crossover signal when no new crossover is detected.
-        
-        :param df: DataFrame with 'ema_9' and 'sma_21' columns
-        :return: Dict with signal information
-        """
-        if df.empty or len(df) < 2:
-            return {
-                "signal": self.current_signal or "SELL",  # Default to SELL if no signal yet
-                "price": None, 
-                "reason": "Insufficient data",
-                "timestamp": None
-            }
-        
-        # Get last two rows to check for crossover
-        last_two = df.tail(2).copy()
-        
-        # Check if we have valid indicator values
-        if last_two['ema_9'].isna().any() or last_two['sma_21'].isna().any():
-            # If we don't have a current signal, look back through the data to find the last crossover
-            if self.current_signal is None:
-                self.current_signal = self._find_last_crossover_signal(df)
+        try:
+            self.logger.info(f"Fetching {limit} EMA({window}) values at 5-minute intervals for {symbol}")
             
-            return {
-                "signal": self.current_signal or "SELL",
-                "price": df['close'].iloc[-1] if not df.empty else None,
-                "reason": "Invalid indicators (NaN values) - maintaining last signal",
-                "timestamp": df['timestamp'].iloc[-1] if not df.empty else None
-            }
-        
-        # Check for crossovers
-        prev_ema_above_sma = last_two['ema_9'].iloc[0] > last_two['sma_21'].iloc[0]
-        curr_ema_above_sma = last_two['ema_9'].iloc[1] > last_two['sma_21'].iloc[1]
-        
-        current_price = last_two['close'].iloc[-1]
-        current_timestamp = last_two['timestamp'].iloc[-1]
-        current_ema = last_two['ema_9'].iloc[-1]
-        current_sma = last_two['sma_21'].iloc[-1]
-        
-        # EMA crosses above SMA: Buy signal
-        if not prev_ema_above_sma and curr_ema_above_sma:
-            self.current_signal = "BUY"
-            return {
-                "signal": "BUY", 
-                "price": current_price,
-                "reason": f"EMA({self.ema_period}) crossed above SMA({self.sma_period})",
-                "timestamp": current_timestamp,
-                "ema": current_ema,
-                "sma": current_sma,
-                "crossover_type": "bullish"
-            }
-        
-        # EMA crosses below SMA: Sell signal
-        elif prev_ema_above_sma and not curr_ema_above_sma:
-            self.current_signal = "SELL"
-            return {
-                "signal": "SELL", 
-                "price": current_price,
-                "reason": f"EMA({self.ema_period}) crossed below SMA({self.sma_period})",
-                "timestamp": current_timestamp,
-                "ema": current_ema,
-                "sma": current_sma,
-                "crossover_type": "bearish"
-            }
-        
-        # No crossover detected - maintain current signal
-        # If we don't have a current signal, look back to find the last crossover
-        if self.current_signal is None:
-            self.current_signal = self._find_last_crossover_signal(df)
-        
-        return {
-            "signal": self.current_signal or "SELL",  # Default to SELL if still no signal found
-            "price": current_price,
-            "reason": f"No crossover detected - maintaining {self.current_signal or 'SELL'} signal",
-            "timestamp": current_timestamp,
-            "ema": current_ema,
-            "sma": current_sma,
-            "ema_above_sma": curr_ema_above_sma
-        }
+            # Use Polygon's EMA endpoint with 5-minute intervals
+            ema_response = self.client.get_ema(
+                ticker=symbol,
+                timespan='minute',
+                adjusted=True,
+                window=window,  # 5-minute window
+                series_type='close',
+                order='desc',  # Get most recent values first
+                limit=limit
+            )
+            
+            # Extract EMA values from response
+            ema_values = []
+            if hasattr(ema_response, 'values') and ema_response.values:
+                for item in ema_response.values:
+                    ema_values.append(float(item.value))
+                
+                if ema_values and len(ema_values) == limit:
+                    # Calculate mean of the 9 EMA values
+                    mean_ema = sum(ema_values) / len(ema_values)
+                    
+                    self.logger.info(f"✅ Fetched {len(ema_values)} EMA values, mean EMA: ${mean_ema:.2f}")
+                    return mean_ema
+                else:
+                    self.logger.warning(f"Expected {limit} EMA values but got {len(ema_values)} for {symbol}")
+                    return None
+            else:
+                self.logger.warning(f"No EMA data returned from Polygon for {symbol}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error fetching EMA from Polygon for {symbol}: {e}")
+            return None
     
-    def get_stock_data_with_indicators(self, symbol, timespan='minute', multiplier=5, days_back=5):
+    def get_current_indicators(self, symbol):
         """
-        Fetch stock data and calculate EMA/SMA indicators.
+        Get current SMA and EMA values directly from Polygon API without fetching aggregates.
+        Uses 5-minute intervals and calculates mean of 21 values for each indicator.
         
         :param symbol: Stock symbol
-        :param timespan: Timespan for aggregates
-        :param multiplier: Multiplier for timespan (5 for 5-minute intervals)
-        :param days_back: Days to look back
-        :return: DataFrame with OHLCV data plus EMA/SMA indicators
+        :return: Dict with current SMA and EMA values, or None if failed
         """
-        # Fetch raw data
-        df = self.fetch_aggregates(symbol, timespan, multiplier, days_back)
-        
-        if df.empty:
-            self.logger.warning(f"No data received for {symbol}")
-            return df
-        
-        # Add technical indicators
-        df = self.add_technical_indicators(df)
-        
-        # Show latest values
-        if not df.empty:
-            latest = df.iloc[-1]
-            self.logger.info(f"Latest data for {symbol}:")
-            self.logger.info(f"  Time: {latest['timestamp']}")
-            self.logger.info(f"  Close: ${latest['close']:.2f}")
-            if not pd.isna(latest['sma_21']):
-                self.logger.info(f"  SMA({self.sma_period}): ${latest['sma_21']:.2f}")
-            if not pd.isna(latest['ema_9']):
-                self.logger.info(f"  EMA({self.ema_period}): ${latest['ema_9']:.2f}")
-        
-        return df
+        try:
+            # Get current SMA and EMA values from Polygon (5-minute intervals, 21 samples each)
+            current_sma = self.get_sma(symbol, window=5, limit=21)
+            current_ema = self.get_ema(symbol, window=5, limit=9)
+            
+            if current_sma is not None and current_ema is not None:
+                return {
+                    'sma': current_sma,
+                    'ema': current_ema,
+                    'timestamp': pd.Timestamp.now()
+                }
+            else:
+                self.logger.warning(f"Failed to get indicators from Polygon for {symbol}")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error getting current indicators for {symbol}: {e}")
+            return None
     
-    def get_signal(self, symbol, timespan='minute', multiplier=5, days_back=5):
+    def get_signal(self, symbol):
         """
         Get trading signal for a symbol based on EMA/SMA crossover.
+        Uses direct Polygon API calls for current indicators instead of fetching aggregates.
         
         :param symbol: Stock symbol
-        :param timespan: Timespan for aggregates
-        :param multiplier: Multiplier for timespan (5 for 5-minute intervals)
-        :param days_back: Days to look back
         :return: Dict with signal information
         """
         try:
-            # Get data with indicators
-            df = self.get_stock_data_with_indicators(symbol, timespan, multiplier, days_back)
+            # Try to get current indicators directly from Polygon
+            indicators = self.get_current_indicators(symbol)
             
-            if df.empty:
-                return {
-                    "signal": self.current_signal or "SELL",
-                    "price": None,
-                    "reason": "No data available",
-                    "timestamp": None
+            if indicators:
+                # We have current SMA and EMA values
+                current_sma = indicators['sma']
+                current_ema = indicators['ema']
+                current_timestamp = indicators['timestamp']
+                                
+                # Determine signal based on EMA vs SMA position
+                if current_ema > current_sma:
+                    # EMA above SMA - bullish signal
+                    if self.current_signal != "BUY":
+                        # Signal changed to BUY
+                        self.current_signal = "BUY"
+                        reason = f"EMA(5-min avg) above SMA(5-min avg) - bullish trend"
+                        crossover_type = "bullish"
+                    else:
+                        # Maintaining BUY signal
+                        reason = f"Maintaining BUY signal - EMA(5-min avg) remains above SMA(5-min avg)"
+                        crossover_type = None
+                else:
+                    # EMA below SMA - bearish signal
+                    if self.current_signal != "SELL":
+                        # Signal changed to SELL
+                        self.current_signal = "SELL"
+                        reason = f"EMA(5-min avg) below SMA(5-min avg) - bearish trend"
+                        crossover_type = "bearish"
+                    else:
+                        # Maintaining SELL signal
+                        reason = f"Maintaining SELL signal - EMA(5-min avg) remains below SMA(5-min avg)"
+                        crossover_type = None
+                
+                signal_info = {
+                    "signal": self.current_signal,
+                    "reason": reason,
+                    "timestamp": current_timestamp,
+                    "ema": current_ema,
+                    "sma": current_sma,
+                    "ema_above_sma": current_ema > current_sma
                 }
+                
+                if crossover_type:
+                    signal_info["crossover_type"] = crossover_type
+                
+                self.logger.info(f"🎯 Signal for {symbol}: {signal_info['signal']} - {signal_info['reason']}")
+                return signal_info
             
-            # Detect crossover
-            signal_info = self.detect_crossover(df)
-            
-            self.logger.info(f"🎯 Signal for {symbol}: {signal_info['signal']} - {signal_info['reason']}")
-            
-            return signal_info
+            else:
+                # No indicators available
+                self.logger.info(f"🎯 Signal not found {symbol}")
+                return {
+                    "signal": self.current_signal or "NONE",
+                }
             
         except Exception as e:
             self.logger.error(f"❌ Error getting signal for {symbol}: {e}")
             return {
-                "signal": self.current_signal or "SELL", 
+                "signal": self.current_signal or "NONE", 
                 "price": None, 
                 "reason": f"Error: {str(e)}",
                 "timestamp": None
             }
-    
-    def get_latest_price(self, symbol):
-        """
-        Get the latest price for a symbol.
-        
-        :param symbol: Stock symbol
-        :return: Latest price or None
-        """
-        try:
-            # Get last trade
-            trade = self.client.get_last_trade(symbol)
-            if trade:
-                return trade.price
-            return None
-        except Exception as e:
-            self.logger.error(f"Error getting latest price for {symbol}: {e}")
-            return None
-    
-    def _find_last_crossover_signal(self, df):
-        """
-        Look back through the data to find the most recent crossover signal.
-        
-        :param df: DataFrame with 'ema_9' and 'sma_21' columns
-        :return: 'BUY' or 'SELL' based on last crossover, or 'BUY' as default
-        """
-        if df.empty or len(df) < 2:
-            return "SELL"  # Default to SELL
-        
-        # Get valid data (non-NaN indicators)
-        valid_data = df.dropna(subset=['ema_9', 'sma_21'])
-        
-        if len(valid_data) < 2:
-            return "SELL"  # Default to SELL
-        
-        # Look through the data backwards to find the last crossover
-        for i in range(len(valid_data) - 1, 0, -1):
-            curr_ema_above_sma = valid_data['ema_9'].iloc[i] > valid_data['sma_21'].iloc[i]
-            prev_ema_above_sma = valid_data['ema_9'].iloc[i-1] > valid_data['sma_21'].iloc[i-1]
-            
-            # Found a crossover
-            if prev_ema_above_sma != curr_ema_above_sma:
-                if curr_ema_above_sma:
-                    self.logger.info("Found historical BUY crossover signal")
-                    return "BUY"
-                else:
-                    self.logger.info("Found historical SELL crossover signal")
-                    return "SELL"
-        
-        # No crossover found, determine signal based on current position
-        latest_ema = valid_data['ema_9'].iloc[-1]
-        latest_sma = valid_data['sma_21'].iloc[-1]
-        
-        if latest_ema > latest_sma:
-            self.logger.info("No crossover found - EMA above SMA, defaulting to BUY")
-            return "BUY"
-        else:
-            self.logger.info("No crossover found - EMA below SMA, defaulting to SELL")
-            return "SELL"
 
 
 def main():
