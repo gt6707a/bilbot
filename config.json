@@ -12,6 +12,7 @@
       "algorithm": "sma_ema_crossover",
       "interval_minutes": 5,
       "initial_value": 1090,
+      "current_value": 1090,
       "signal_timespan": "minute",
       "signal_multiplier": 5,
       "signal_days_back": 3,

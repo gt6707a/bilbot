@@ -11,6 +11,7 @@ from threading import Thread
 # Import our trading bot and algorithms
 from bling_bot import BlingBot
 from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
+from config_manager import ConfigManager
 
 # Timezone for NYSE
 nyse = pytz.timezone('America/New_York')
@@ -39,8 +40,12 @@ def create_algorithm(algorithm_name):
         raise ValueError(f"Unknown algorithm: {algorithm_name}.")
     return ALGORITHMS[algorithm_name]()
 
+def create_bot_from_config_id(bot_id):
+    """Create a BlingBot instance from configuration using bot ID"""
+    return BlingBot.from_config_id(bot_id)
+
 def create_bot_from_config(bot_config):
-    """Create a BlingBot instance from configuration"""
+    """Create a BlingBot instance from configuration (legacy method)"""
     # Create algorithm instance
     algorithm = create_algorithm(bot_config['algorithm'])
     
@@ -55,7 +60,8 @@ def create_bot_from_config(bot_config):
         daily_pnl_threshold=bot_config['daily_pnl_threshold'],
         daily_gain_target=bot_config['daily_gain_target'],
         algorithm=algorithm,
-        paper=True  # Always use paper trading for safety
+        paper=True,  # Always use paper trading for safety
+        bot_id=bot_config.get('id')  # Add bot_id if available
     )
     
     return bot
@@ -81,12 +87,12 @@ def run_bot(bot, logger, check_interval):
     # Monitor market and trade until market closes or limits reached
     while trading_active:
         # Check if market is open - bot's responsibility
-        if not market_is_open():
-            logger.info(f"Market is closed at {datetime.now(tz=nyse)} for {bot.symbol}")
-            # Exit all positions as a safety measure before terminating
-            bot.close_position()
-            # Break out of the loop which will end the program
-            break
+        # if not market_is_open():
+        #     logger.info(f"Market is closed at {datetime.now(tz=nyse)} for {bot.symbol}")
+        #     # Exit all positions as a safety measure before terminating
+        #     bot.close_position()
+        #     # Break out of the loop which will end the program
+        #     break
             
         # Check risk limits - bot's responsibility
         pnl = bot.calculate_pnl()
@@ -115,23 +121,32 @@ def run_bot(bot, logger, check_interval):
     final_pnl = bot.calculate_pnl()
     logger.info(f"Daily P&L for {bot.symbol}: {final_pnl*100:.2f}%")
 
-def run_multiple_bots(config):
-    """Run multiple bots concurrently"""
+def run_multiple_bots(config=None):
+    """Run multiple bots concurrently using ID-based configuration"""
+    
+    # Initialize config manager and get bot IDs
+    config_manager = ConfigManager()
+    bot_ids = config_manager.get_all_bot_ids()
+    
+    # Get global settings from config if provided, otherwise load from file
+    if config is None:
+        config = load_config()
+    
     logger = setup_logging(config['global_settings']['log_level'])
     check_interval = config['global_settings']['check_interval']
     
     logger.info(f"Bling Bot system starting at {pd.Timestamp.now(tz=nyse)}")
-    logger.info(f"Running {len(config['bots'])} bots")
+    logger.info(f"Found {len(bot_ids)} bot IDs: {bot_ids}")
     
-    # Create all bots from configuration
+    # Create all bots from configuration using IDs
     bots = []
-    for bot_config in config['bots']:
+    for bot_id in bot_ids:
         try:
-            bot = create_bot_from_config(bot_config)
+            bot = create_bot_from_config_id(bot_id)
             bots.append(bot)
-            logger.info(f"Created bot for {bot_config['symbol']} using {bot_config['algorithm']} algorithm")
+            logger.info(f"Created bot ID {bot_id} for {bot.symbol} using {bot.algo.__class__.__name__} algorithm")
         except Exception as e:
-            logger.error(f"Failed to create bot for {bot_config['symbol']}: {e}")
+            logger.error(f"Failed to create bot for ID {bot_id}: {e}")
     
     if not bots:
         logger.error("No bots created successfully. Exiting.")
@@ -153,8 +168,7 @@ def run_multiple_bots(config):
 
 if __name__ == "__main__":
     try:
-        config = load_config()
-        run_multiple_bots(config)
+        run_multiple_bots()
     except Exception as e:
         logger = setup_logging()
         logger.error(f"Failed to start bot system: {e}")

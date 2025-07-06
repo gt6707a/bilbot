@@ -15,9 +15,53 @@ class BlingBot:
     Uses per-symbol value tracking: starts with initial_value, updates based on position market value.
     """
     
+    @classmethod
+    def from_config_id(cls, bot_id: int, config_path: str = "config.json"):
+        """
+        Create a BlingBot instance from configuration using bot ID.
+        
+        :param bot_id: Bot ID from config.json
+        :param config_path: Path to config file
+        :return: BlingBot instance
+        """
+        config_manager = ConfigManager(config_path)
+        bot_config = config_manager.get_bot_config_by_id(bot_id)
+        
+        if not bot_config:
+            raise ValueError(f"Bot with ID {bot_id} not found in config")
+        
+        # Import algorithm class
+        from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
+        
+        # Create algorithm instance
+        algorithm_map = {
+            'sma_ema_crossover': SmaEmaCrossoverAlgo
+        }
+        
+        algorithm_name = bot_config.get('algorithm', 'sma_ema_crossover')
+        if algorithm_name not in algorithm_map:
+            raise ValueError(f"Unknown algorithm: {algorithm_name}")
+        
+        algorithm = algorithm_map[algorithm_name]()
+        
+        # Create bot instance with config parameters
+        return cls(
+            bot_id=bot_id,
+            symbol=bot_config['symbol'],
+            interval_minutes=bot_config.get('interval_minutes', 5),
+            initial_value=bot_config.get('initial_value', 1000),
+            paper=True,  # Always use paper trading for safety
+            algorithm=algorithm,
+            signal_timespan=bot_config.get('signal_timespan', 'minute'),
+            signal_multiplier=bot_config.get('signal_multiplier', 5),
+            signal_days_back=bot_config.get('signal_days_back', 3),
+            daily_pnl_threshold=bot_config.get('daily_pnl_threshold', -0.05),
+            daily_gain_target=bot_config.get('daily_gain_target', 0.10)
+        )
+    
     def __init__(self, symbol, interval_minutes=5, initial_value=1000, paper=True, algorithm=None, 
                  signal_timespan='minute', signal_multiplier=5, signal_days_back=3,
-                 daily_pnl_threshold=-0.05, daily_gain_target=0.10):
+                 daily_pnl_threshold=-0.05, daily_gain_target=0.10, bot_id=None):
         """
         Initialize the trading bot.
         
@@ -31,6 +75,7 @@ class BlingBot:
         :param signal_days_back: Number of days of data to use for signal calculation
         :param daily_pnl_threshold: Daily loss limit (negative value, e.g., -0.05 for -5%)
         :param daily_gain_target: Daily gain target (positive value, e.g., 0.10 for 10%)
+        :param bot_id: Bot ID from config.json (optional, used for persistence)
         """
         # Configure logging
         self.logger = logging.getLogger(__name__)
@@ -42,6 +87,7 @@ class BlingBot:
         
         # Trading parameters
         self.symbol = symbol
+        self.bot_id = bot_id
         self.interval_minutes = interval_minutes
         self.initial_value = initial_value
         self.current_value = initial_value
@@ -67,7 +113,11 @@ class BlingBot:
         self.config_manager = ConfigManager()
         
         # Load persisted current value if available, otherwise use initial_value
-        persisted_value = self.config_manager.get_current_value(symbol)
+        if self.bot_id is not None:
+            persisted_value = self.config_manager.get_current_value_by_id(self.bot_id)
+        else:
+            persisted_value = self.config_manager.get_current_value(symbol)
+            
         if persisted_value is not None:
             self.current_value = persisted_value
             self.logger.info(f"Loaded persisted current value: ${self.current_value:.2f}")
@@ -101,10 +151,6 @@ class BlingBot:
             self.logger.error(f"❌ Failed to initialize Alpaca client: {e}")
             raise
         
-        # Initialize config manager for persistent storage
-        self.config_manager = ConfigManager('blingbot_config.json')
-        self.load_config()
-        
         self.logger.info(f"🤖 BlingBot initialized for {symbol}")
         self.logger.info(f"   Initial value: ${self.current_value:.2f}")
         self.logger.info(f"   Signal interval: {interval_minutes} minutes")
@@ -135,7 +181,13 @@ class BlingBot:
         """Update current_value and persist to config"""
         if abs(new_value - self.current_value) > 0.01:  # Only update if significant change
             self.current_value = new_value
-            self.config_manager.update_current_value(self.symbol, new_value)
+            
+            # Use bot_id if available, otherwise fallback to symbol
+            if self.bot_id is not None:
+                self.config_manager.update_current_value_by_id(self.bot_id, new_value)
+            else:
+                self.config_manager.update_current_value(self.symbol, new_value)
+                
             self.logger.debug(f"Updated and persisted current value: ${self.current_value:.2f}")
     
     def reconnect(self):

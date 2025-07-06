@@ -106,6 +106,71 @@ class ConfigManager:
             self.load_config()
         
         return [bot.get('symbol') for bot in self.config_data.get('bots', []) if bot.get('symbol')]
+    
+    def get_bot_config_by_id(self, bot_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Get configuration for a specific bot by ID.
+        
+        :param bot_id: Bot ID (e.g., 1, 2, 3)
+        :return: Bot configuration dictionary or None if not found
+        """
+        if not self.config_data:
+            self.load_config()
+        
+        for bot in self.config_data.get('bots', []):
+            if bot.get('id') == bot_id:
+                return bot
+        return None
+    
+    def get_all_bot_ids(self) -> list:
+        """
+        Get a list of all bot IDs in the configuration.
+        
+        :return: List of bot IDs
+        """
+        if not self.config_data:
+            self.load_config()
+        
+        return [bot.get('id') for bot in self.config_data.get('bots', []) if bot.get('id') is not None]
+    
+    def update_current_value_by_id(self, bot_id: int, new_value: float) -> bool:
+        """
+        Update the current value for a bot by ID and persist to file.
+        
+        :param bot_id: Bot ID
+        :param new_value: New value to persist
+        :return: True if successful, False otherwise
+        """
+        try:
+            if not self.config_data:
+                self.load_config()
+            
+            # Find and update the bot configuration by ID
+            for bot in self.config_data.get('bots', []):
+                if bot.get('id') == bot_id:
+                    bot['current_value'] = round(new_value, 2)
+                    
+                    # Save to file
+                    self.save_config()
+                    return True
+            
+            return False  # Bot ID not found
+            
+        except Exception as e:
+            print(f"Error updating current value for bot ID {bot_id}: {e}")
+            return False
+    
+    def get_current_value_by_id(self, bot_id: int) -> Optional[float]:
+        """
+        Get the current persisted value for a bot by ID.
+        
+        :param bot_id: Bot ID
+        :return: Current value or None if not found
+        """
+        bot_config = self.get_bot_config_by_id(bot_id)
+        if bot_config:
+            return bot_config.get('current_value')
+        return None
 
 
 # Example usage functions
