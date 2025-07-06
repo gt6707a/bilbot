@@ -7,15 +7,17 @@
   },
   "bots": [
     {
+      "id": 1,
       "symbol": "SPY",
       "algorithm": "sma_ema_crossover",
       "interval_minutes": 5,
       "initial_value": 1090,
+      "current_value": 1090,
       "signal_timespan": "minute",
       "signal_multiplier": 5,
       "signal_days_back": 3,
       "daily_pnl_threshold": -0.05,
-      "daily_gain_target": 0.10,
+      "daily_gain_target": 0.1,
       "description": "S&P 500 ETF with conservative 5-minute intervals"
     }
   ]
