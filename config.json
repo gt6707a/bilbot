@@ -10,25 +10,13 @@
       "symbol": "SPY",
       "algorithm": "sma_ema_crossover",
       "interval_minutes": 5,
-      "initial_value": 1040,
+      "initial_value": 1090,
       "signal_timespan": "minute",
       "signal_multiplier": 5,
       "signal_days_back": 3,
       "daily_pnl_threshold": -0.05,
       "daily_gain_target": 0.10,
       "description": "S&P 500 ETF with conservative 5-minute intervals"
-    },
-    {
-      "symbol": "QQQ",
-      "algorithm": "sma_ema_crossover",
-      "interval_minutes": 10,
-      "initial_value": 1040,
-      "signal_timespan": "minute",
-      "signal_multiplier": 15,
-      "signal_days_back": 5,
-      "daily_pnl_threshold": -0.05,
-      "daily_gain_target": 0.1,
-      "description": "NASDAQ ETF with moderate 10-minute intervals"
     }
   ]
 }

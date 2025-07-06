@@ -47,9 +47,7 @@ class SmaEmaCrossoverAlgo:
         
     def get_sma(self, symbol, window=5, limit=21):
         """
-        Get Simple Moving Average values from Polygon API at 5-minute intervals.
-        Fetches 21 SMA values and returns their mean.
-        
+        Get Simple Moving Average values
         :param symbol: Stock symbol (e.g., 'SPY', 'AAPL')
         :param window: SMA window/period for 5-minute intervals (default: 5)
         :param limit: Number of SMA values to fetch (default: 21)
@@ -71,21 +69,17 @@ class SmaEmaCrossoverAlgo:
             
             # Extract SMA values from response
             sma_values = []
-            if hasattr(sma_response, 'values') and sma_response.values:
-                for item in sma_response.values:
-                    sma_values.append(float(item.value))
+
+            for item in sma_response.values:
+                sma_values.append(float(item.value))
+
+            if sma_values and len(sma_values) == limit:
+                mean_sma = sum(sma_values) / len(sma_values)
                 
-                if sma_values and len(sma_values) == limit:
-                    # Calculate mean of the 21 SMA values
-                    mean_sma = sum(sma_values) / len(sma_values)
-                    
-                    self.logger.info(f"✅ Fetched {len(sma_values)} SMA values, mean SMA: ${mean_sma:.2f}")
-                    return mean_sma
-                else:
-                    self.logger.warning(f"Expected {limit} SMA values but got {len(sma_values)} for {symbol}")
-                    return None
+                self.logger.info(f"✅ Fetched {len(sma_values)} SMA values, mean SMA: ${mean_sma:.2f}")
+                return mean_sma
             else:
-                self.logger.warning(f"No SMA data returned from Polygon for {symbol}")
+                self.logger.warning(f"Expected {limit} SMA values but got {len(sma_values)} for {symbol}")
                 return None
                 
         except Exception as e:
@@ -118,21 +112,16 @@ class SmaEmaCrossoverAlgo:
             
             # Extract EMA values from response
             ema_values = []
-            if hasattr(ema_response, 'values') and ema_response.values:
-                for item in ema_response.values:
-                    ema_values.append(float(item.value))
-                
-                if ema_values and len(ema_values) == limit:
-                    # Calculate mean of the 9 EMA values
-                    mean_ema = sum(ema_values) / len(ema_values)
-                    
-                    self.logger.info(f"✅ Fetched {len(ema_values)} EMA values, mean EMA: ${mean_ema:.2f}")
-                    return mean_ema
-                else:
-                    self.logger.warning(f"Expected {limit} EMA values but got {len(ema_values)} for {symbol}")
-                    return None
+
+            for item in ema_response.values:
+                ema_values.append(float(item.value))
+            
+            if ema_values and len(ema_values) == limit:
+                mean_ema = sum(ema_values) / len(ema_values)
+                self.logger.info(f"✅ Fetched {len(ema_values)} EMA values, mean EMA: ${mean_ema:.2f}")
+                return mean_ema
             else:
-                self.logger.warning(f"No EMA data returned from Polygon for {symbol}")
+                self.logger.warning(f"Expected {limit} EMA values but got {len(ema_values)} for {symbol}")
                 return None
                 
         except Exception as e:
@@ -141,14 +130,11 @@ class SmaEmaCrossoverAlgo:
     
     def get_current_indicators(self, symbol):
         """
-        Get current SMA and EMA values directly from Polygon API without fetching aggregates.
-        Uses 5-minute intervals and calculates mean of 21 values for each indicator.
-        
+        Get current SMA and EMA values
         :param symbol: Stock symbol
         :return: Dict with current SMA and EMA values, or None if failed
         """
         try:
-            # Get current SMA and EMA values from Polygon (5-minute intervals, 21 samples each)
             current_sma = self.get_sma(symbol, window=5, limit=21)
             current_ema = self.get_ema(symbol, window=5, limit=9)
             
@@ -185,28 +171,17 @@ class SmaEmaCrossoverAlgo:
                 current_timestamp = indicators['timestamp']
                                 
                 # Determine signal based on EMA vs SMA position
-                if current_ema > current_sma:
-                    # EMA above SMA - bullish signal
-                    if self.current_signal != "BUY":
-                        # Signal changed to BUY
-                        self.current_signal = "BUY"
-                        reason = f"EMA(5-min avg) above SMA(5-min avg) - bullish trend"
-                        crossover_type = "bullish"
-                    else:
-                        # Maintaining BUY signal
-                        reason = f"Maintaining BUY signal - EMA(5-min avg) remains above SMA(5-min avg)"
-                        crossover_type = None
-                else:
+                if current_ema < current_sma:
                     # EMA below SMA - bearish signal
-                    if self.current_signal != "SELL":
-                        # Signal changed to SELL
-                        self.current_signal = "SELL"
-                        reason = f"EMA(5-min avg) below SMA(5-min avg) - bearish trend"
-                        crossover_type = "bearish"
-                    else:
-                        # Maintaining SELL signal
-                        reason = f"Maintaining SELL signal - EMA(5-min avg) remains below SMA(5-min avg)"
-                        crossover_type = None
+                    self.current_signal = "SELL"
+                    reason = f"EMA(5-min avg) below SMA(5-min avg) - bearish trend"
+                    crossover_type = "bearish"
+                else:
+                    # EMA above SMA - bullish signal
+                    # Signal changed to BUY
+                    self.current_signal = "BUY"
+                    reason = f"EMA(5-min avg) above SMA(5-min avg) - bullish trend"
+                    crossover_type = "bullish"
                 
                 signal_info = {
                     "signal": self.current_signal,
@@ -214,11 +189,9 @@ class SmaEmaCrossoverAlgo:
                     "timestamp": current_timestamp,
                     "ema": current_ema,
                     "sma": current_sma,
-                    "ema_above_sma": current_ema > current_sma
+                    "ema_above_sma": current_ema > current_sma,
+                    "crossover_type": crossover_type
                 }
-                
-                if crossover_type:
-                    signal_info["crossover_type"] = crossover_type
                 
                 self.logger.info(f"🎯 Signal for {symbol}: {signal_info['signal']} - {signal_info['reason']}")
                 return signal_info

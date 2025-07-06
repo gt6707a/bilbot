@@ -123,10 +123,7 @@ class BlingBot:
             
             # Get signal from trading algorithm
             signal_info = self.algo.get_signal(
-                symbol=self.symbol,
-                timespan=self.signal_timespan,
-                multiplier=self.signal_multiplier,
-                days_back=self.signal_days_back
+                symbol=self.symbol
             )
             
             # Cache the signal
@@ -213,8 +210,6 @@ class BlingBot:
         try:
             # Update current position
             current_position = self.get_open_position()
-            
-            # Process BUY and SELL signals
             
             # Handle BUY signal
             if signal['signal'] == 'BUY':
