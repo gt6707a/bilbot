@@ -1,7 +1,7 @@
 # ID-Based Bot Initialization - Implementation Summary
 
 ## Overview
-Successfully updated the bilbot trading system to support ID-based bot initialization, allowing each bot to initialize itself from config.json using unique identifiers.
+Successfully updated the bling trading system to support ID-based bot initialization, allowing each bot to initialize itself from config.json using unique identifiers.
 
 ## Changes Made
 

@@ -75,8 +75,10 @@ class SmaEmaCrossoverAlgo:
 
             if sma_values and len(sma_values) == limit:
                 mean_sma = sum(sma_values) / len(sma_values)
-                
-                self.logger.info(f"✅ Fetched {len(sma_values)} SMA values, mean SMA: ${mean_sma:.2f}")
+
+                timestamp_ms = sma_response.values[0].timestamp
+                local_time = datetime.fromtimestamp(timestamp_ms/1000).strftime('%Y-%m-%d %H:%M:%S')
+                self.logger.info(f"✅ Fetched {len(sma_values)} SMA values, mean SMA: ${mean_sma:.2f}. Local time: {local_time}")
                 return mean_sma
             else:
                 self.logger.warning(f"Expected {limit} SMA values but got {len(sma_values)} for {symbol}")

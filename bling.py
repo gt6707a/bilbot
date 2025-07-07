@@ -32,7 +32,7 @@ def setup_logging(log_level='INFO'):
         level=getattr(logging, log_level.upper()),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    return logging.getLogger('bilbot')
+    return logging.getLogger('bling')
 
 def create_algorithm(algorithm_name):
     """Create algorithm instance from name"""
