@@ -21,7 +21,7 @@
       "description": "S&P 500 ETF with conservative 5-minute intervals"
     },
     {
-      "id": 1,
+      "id": 2,
       "symbol": "SPDN",
       "algorithm": "sma_ema_crossover",
       "interval_minutes": 5,
