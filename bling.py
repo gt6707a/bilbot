@@ -87,12 +87,12 @@ def run_bot(bot, logger, check_interval):
     # Monitor market and trade until market closes or limits reached
     while trading_active:
         # Check if market is open - bot's responsibility
-        # if not market_is_open():
-        #     logger.info(f"Market is closed at {datetime.now(tz=nyse)} for {bot.symbol}")
-        #     # Exit all positions as a safety measure before terminating
-        #     bot.close_position()
-        #     # Break out of the loop which will end the program
-        #     break
+        if not market_is_open():
+            logger.info(f"Market is closed at {datetime.now(tz=nyse)} for {bot.symbol}")
+            # Exit all positions as a safety measure before terminating
+            bot.close_position()
+            # Break out of the loop which will end the program
+            break
             
         # Check risk limits - bot's responsibility
         pnl = bot.calculate_pnl()
