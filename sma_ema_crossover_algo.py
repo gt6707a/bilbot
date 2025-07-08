@@ -60,7 +60,7 @@ class SmaEmaCrossoverAlgo:
             sma_response = self.client.get_sma(
                 ticker=symbol,
                 timespan='minute',
-                adjusted=True,
+                adjusted=False,
                 window=window,  # 5-minute window
                 series_type='close',
                 order='desc',  # Get most recent values first
@@ -78,7 +78,7 @@ class SmaEmaCrossoverAlgo:
 
                 timestamp_ms = sma_response.values[0].timestamp
                 local_time = datetime.fromtimestamp(timestamp_ms/1000).strftime('%Y-%m-%d %H:%M:%S')
-                self.logger.info(f"✅ Fetched {len(sma_values)} SMA values, mean SMA: ${mean_sma:.2f}. Local time: {local_time}")
+                self.logger.info(f"✅ Fetched {len(sma_values)} SMA values, mean SMA: ${mean_sma:.4f}. Local time: {local_time}")
                 return mean_sma
             else:
                 self.logger.warning(f"Expected {limit} SMA values but got {len(sma_values)} for {symbol}")
@@ -105,7 +105,7 @@ class SmaEmaCrossoverAlgo:
             ema_response = self.client.get_ema(
                 ticker=symbol,
                 timespan='minute',
-                adjusted=True,
+                adjusted=False,
                 window=window,  # 5-minute window
                 series_type='close',
                 order='desc',  # Get most recent values first
@@ -120,7 +120,7 @@ class SmaEmaCrossoverAlgo:
             
             if ema_values and len(ema_values) == limit:
                 mean_ema = sum(ema_values) / len(ema_values)
-                self.logger.info(f"✅ Fetched {len(ema_values)} EMA values, mean EMA: ${mean_ema:.2f}")
+                self.logger.info(f"✅ Fetched {len(ema_values)} EMA values, mean EMA: ${mean_ema:.4f}")
                 return mean_ema
             else:
                 self.logger.warning(f"Expected {limit} EMA values but got {len(ema_values)} for {symbol}")
@@ -233,14 +233,14 @@ def main():
         return
     
     # Test symbols
-    symbols = ['SPY', 'AAPL', 'MSFT', 'GOOGL']
+    symbols = ['SPY']
     
     for symbol in symbols:
         print(f"\n--- Analyzing {symbol} with SMA/EMA Crossover Algorithm ---")
         
         try:
             # Get signal (5-minute intervals)
-            signal = algo.get_signal(symbol, multiplier=5, days_back=3)
+            signal = algo.get_signal(symbol)
             
             print(f"📊 Signal: {signal['signal']}")
             print(f"💰 Price: ${signal['price']:.2f}" if signal['price'] else "💰 Price: N/A")
