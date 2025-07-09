@@ -133,7 +133,7 @@ def run_multiple_bots(config=None):
         config = load_config()
     
     logger = setup_logging(config['global_settings']['log_level'])
-    check_interval = config['global_settings']['check_interval']
+    check_interval = int(os.getenv('CHECK_INTERVAL', 600))
     
     logger.info(f"Bling Bot system starting at {pd.Timestamp.now(tz=nyse)}")
     logger.info(f"Found {len(bot_ids)} bot IDs: {bot_ids}")
