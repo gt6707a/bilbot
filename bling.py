@@ -28,37 +28,9 @@ def setup_logging(log_level='INFO'):
     )
     return logging.getLogger('bling')
 
-def create_algorithm(algorithm_name):
-    """Create algorithm instance from name"""
-    if algorithm_name not in ALGORITHMS:
-        raise ValueError(f"Unknown algorithm: {algorithm_name}.")
-    return ALGORITHMS[algorithm_name]()
-
 def create_bot_from_config_id(bot_id):
     """Create a BlingBot instance from configuration using bot ID"""
     return BlingBot.from_config_id(bot_id)
-
-def create_bot_from_config(bot_config):
-    """Create a BlingBot instance from configuration (legacy method)"""
-    # Create algorithm instance
-    algorithm = create_algorithm(bot_config['algorithm'])
-    
-    # Create bot with all parameters from config
-    bot = BlingBot(
-        symbol=bot_config['symbol'],
-        interval_minutes=bot_config['interval_minutes'],
-        initial_value=bot_config['current_value'],
-        signal_timespan=bot_config['signal_timespan'],
-        signal_multiplier=bot_config['signal_multiplier'],
-        signal_days_back=bot_config['signal_days_back'],
-        daily_pnl_threshold=bot_config['daily_pnl_threshold'],
-        daily_gain_target=bot_config['daily_gain_target'],
-        algorithm=algorithm,
-        paper=True,  # Always use paper trading for safety
-        bot_id=bot_config.get('id')  # Add bot_id if available
-    )
-    
-    return bot
 
 def market_is_open():
     """Check if market is open using NYSE hours and holidays"""
