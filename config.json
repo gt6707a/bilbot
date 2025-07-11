@@ -11,7 +11,7 @@
       "symbol": "SPY",
       "algorithm": "sma_ema_crossover_agg",
       "initial_value": 1000,
-      "current_value": 1001.16,
+      "current_value": 1000.81,
       "signal_timespan": "minute",
       "signal_multiplier": 5,
       "signal_days_back": 3,

@@ -4,7 +4,6 @@ Simple script to run a single bot for testing purposes.
 This is useful for testing individual bot configurations without running all bots.
 """
 
-import json
 import sys
 from bling import load_config, create_bot_from_config, setup_logging, run_bot
 

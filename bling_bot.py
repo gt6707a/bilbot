@@ -1,8 +1,6 @@
 import os
-import time
-import pandas as pd
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
