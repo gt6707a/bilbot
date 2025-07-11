@@ -15,8 +15,14 @@ from config_manager import ConfigManager
 # Timezone for NYSE
 nyse = pytz.timezone('America/New_York')
 
-def load_config(config_path='config.json'):
+def load_config(logger, config_path=None):
     """Load configuration from JSON file"""
+    if config_path is None:
+        config_path = os.getenv('CONFIG_PATH')
+        if not config_path:
+            raise ValueError("CONFIG_PATH environment variable is not set")
+    
+    logger.info(f"Loading configuration from {config_path}")
     with open(config_path, 'r') as f:
         return json.load(f)
 
@@ -94,12 +100,12 @@ def run_multiple_bots(config=None):
     config_manager = ConfigManager()
     bot_ids = config_manager.get_all_bot_ids()
     
+    logger = setup_logging('INFO')
+    check_interval = int(os.getenv('CHECK_INTERVAL', 600))
+
     # Get global settings from config if provided, otherwise load from file
     if config is None:
-        config = load_config()
-    
-    logger = setup_logging(config['global_settings']['log_level'])
-    check_interval = int(os.getenv('CHECK_INTERVAL', 600))
+        config = load_config(logger)
     
     logger.info(f"Bling Bot system starting at {pd.Timestamp.now(tz=nyse)}")
     logger.info(f"Found {len(bot_ids)} bot IDs: {bot_ids}")

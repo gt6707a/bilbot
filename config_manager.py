@@ -1,4 +1,5 @@
 import json
+import os
 from typing import Dict, Any, Optional
 
 class ConfigManager:
@@ -6,12 +7,17 @@ class ConfigManager:
     Manages reading and writing configuration data, specifically for persisting bot values.
     """
     
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = None):
         """
         Initialize the ConfigManager.
         
         :param config_path: Path to the config.json file
         """
+        if config_path is None:
+            config_path = os.getenv('CONFIG_PATH')
+            if not config_path:
+                raise ValueError("CONFIG_PATH environment variable is not set")
+        
         self.config_path = config_path
         self.config_data = None
         self.load_config()
@@ -173,7 +179,7 @@ class ConfigManager:
 
 
 # Example usage functions
-def update_bot_value(symbol: str, new_value: float, config_path: str = "config.json") -> bool:
+def update_bot_value(symbol: str, new_value: float, config_path: str = None) -> bool:
     """
     Convenience function to update a bot's current value.
     
@@ -185,7 +191,7 @@ def update_bot_value(symbol: str, new_value: float, config_path: str = "config.j
     config_manager = ConfigManager(config_path)
     return config_manager.update_current_value(symbol, new_value)
 
-def get_bot_current_value(symbol: str, config_path: str = "config.json") -> Optional[float]:
+def get_bot_current_value(symbol: str, config_path: str = None) -> Optional[float]:
     """
     Convenience function to get a bot's current value.
     

@@ -14,7 +14,7 @@ class BlingBot:
     """
     
     @classmethod
-    def from_config_id(cls, bot_id: int, config_path: str = "config.json"):
+    def from_config_id(cls, bot_id: int, config_path: str = None):
         """
         Create a BlingBot instance from configuration using bot ID.
         
