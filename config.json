@@ -9,7 +9,7 @@
     {
       "id": 1,
       "symbol": "SPY",
-      "algorithm": "sma_ema_crossover",
+      "algorithm": "sma_ema_crossover_agg",
       "initial_value": 1000,
       "current_value": 1000,
       "signal_timespan": "minute",
@@ -22,7 +22,7 @@
     {
       "id": 2,
       "symbol": "SPDN",
-      "algorithm": "sma_ema_crossover",
+      "algorithm": "sma_ema_crossover_agg",
       "interval_minutes": 5,
       "initial_value": 1000,
       "current_value": 1000,

@@ -32,10 +32,12 @@ class BlingBot:
         
         # Import algorithm class
         from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
+        from sma_ema_crossover_algo_agg import SmaEmaCrossoverAlgoAgg
         
         # Create algorithm instance
         algorithm_map = {
-            'sma_ema_crossover': SmaEmaCrossoverAlgo
+            'sma_ema_crossover': SmaEmaCrossoverAlgo,
+            'sma_ema_crossover_agg': SmaEmaCrossoverAlgoAgg
         }
         
         algorithm_name = bot_config.get('algorithm', 'sma_ema_crossover')

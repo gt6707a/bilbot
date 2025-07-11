@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from polygon import RESTClient
 import time
 
-class SmaEmaCrossoverAlgo:
+class SmaEmaCrossoverAlgoAgg:
     """
     Fetch stock market data from Polygon API and calculate technical indicators.
     Detects EMA/SMA crossovers for trading signals.
@@ -45,109 +45,122 @@ class SmaEmaCrossoverAlgo:
         # Signal state tracking
         self.current_signal = None  # Will be 'BUY' or 'SELL'
         
-    def get_sma(self, symbol, window=5, limit=21):
+    def get_sma(self, aggs):
         """
-        Get Simple Moving Average values
-        :param symbol: Stock symbol (e.g., 'SPY', 'AAPL')
-        :param window: SMA window/period for 5-minute intervals (default: 5)
-        :param limit: Number of SMA values to fetch (default: 21)
-        :return: Mean of SMA values or None
+        Calculate Simple Moving Average from aggregates
+        :param aggs: List of aggregate objects from list_aggs
+        :return: Latest SMA value or None
         """
         try:
-            self.logger.info(f"Fetching {limit} SMA({window}) values at 5-minute intervals for {symbol}")
-            
-            # Use Polygon's SMA endpoint with 5-minute intervals
-            sma_response = self.client.get_sma(
-                ticker=symbol,
-                timespan='minute',
-                adjusted=False,
-                window=window,  # 5-minute window
-                series_type='close',
-                order='desc',  # Get most recent values first
-                limit=limit    # Fetch 21 values
-            )
-            
-            # Extract SMA values from response
-            sma_values = []
-
-            for item in sma_response.values:
-                sma_values.append(float(item.value))
-
-            if sma_values and len(sma_values) == limit:
-                mean_sma = sum(sma_values) / len(sma_values)
-
-                timestamp_ms = sma_response.values[0].timestamp
-                local_time = datetime.fromtimestamp(timestamp_ms/1000).strftime('%Y-%m-%d %H:%M:%S')
-                self.logger.info(f"✅ Fetched {len(sma_values)} SMA values, mean SMA: ${mean_sma:.4f}. Local time: {local_time}")
-                return mean_sma
-            else:
-                self.logger.warning(f"Expected {limit} SMA values but got {len(sma_values)} for {symbol}")
+            if not aggs:
                 return None
                 
+            # Extract close prices from aggregates
+            close_prices = [agg.close for agg in aggs]
+            
+            if len(close_prices) >= self.sma_period:
+                # Calculate SMA from the most recent prices
+                # Take the first sma_period prices (since sorted desc, these are most recent)
+                latest_sma = sum(close_prices) / len(close_prices)
+                return latest_sma
+            else:
+                # Use all available prices if we don't have enough for the full period
+                latest_sma = sum(close_prices) / len(close_prices)
+                return latest_sma
+                
         except Exception as e:
-            self.logger.error(f"❌ Error fetching SMA from Polygon for {symbol}: {e}")
             return None
     
-    def get_ema(self, symbol, window=5, limit=9):
+    def get_ema(self, aggs):
         """
-        Get Exponential Moving Average values from Polygon API at 5-minute intervals.
-        Fetches 9 EMA values and returns their mean.
-        
-        :param symbol: Stock symbol (e.g., 'SPY', 'AAPL')
-        :param window: EMA window/period for 5-minute intervals (default: 5)
-        :param limit: Number of EMA values to fetch (default: 9)
-        :return: Mean of EMA values or None
+        Calculate Exponential Moving Average from aggregates
+        :param aggs: List of aggregate objects from list_aggs
+        :return: Latest EMA value or None
         """
         try:
-            self.logger.info(f"Fetching {limit} EMA({window}) values at 5-minute intervals for {symbol}")
-            
-            # Use Polygon's EMA endpoint with 5-minute intervals
-            ema_response = self.client.get_ema(
-                ticker=symbol,
-                timespan='minute',
-                adjusted=False,
-                window=window,  # 5-minute window
-                series_type='close',
-                order='desc',  # Get most recent values first
-                limit=limit
-            )
-            
-            # Extract EMA values from response
-            ema_values = []
-
-            for item in ema_response.values:
-                ema_values.append(float(item.value))
-            
-            if ema_values and len(ema_values) == limit:
-                mean_ema = sum(ema_values) / len(ema_values)
-                self.logger.info(f"✅ Fetched {len(ema_values)} EMA values, mean EMA: ${mean_ema:.4f}")
-                return mean_ema
-            else:
-                self.logger.warning(f"Expected {limit} EMA values but got {len(ema_values)} for {symbol}")
+            if not aggs:
                 return None
                 
+            # EMA only needs the first 9 aggregates (most recent since sorted desc)
+            close_prices = list(reversed([agg.close for agg in aggs[:self.ema_period]]))
+            
+            if len(close_prices) >= self.ema_period:
+                # Calculate EMA using exponential smoothing
+                alpha = 2.0 / (self.ema_period + 1)
+                ema = close_prices[0]  # Start with first price
+                
+                for price in close_prices[1:]:
+                    ema = alpha * price + (1 - alpha) * ema
+                
+                return ema
+            else:
+                # Use simple average if we don't have enough data points
+                return sum(close_prices) / len(close_prices)
+                
         except Exception as e:
-            self.logger.error(f"❌ Error fetching EMA from Polygon for {symbol}: {e}")
             return None
-    
-    def get_current_indicators(self, symbol):
+
+
+    def get_current_indicators(self, symbol, multiplier=5, limit=21):
         """
         Get current SMA and EMA values
         :param symbol: Stock symbol
+        :param multiplier: Multiplier for timespan (default: 5 for 5-minute intervals)
+        :param limit: Number of aggregates to fetch (default: 21)
         :return: Dict with current SMA and EMA values, or None if failed
         """
         try:
-            current_sma = self.get_sma(symbol, window=5, limit=21)
-            current_ema = self.get_ema(symbol, window=5, limit=9)
+            self.logger.info(f"Fetching aggregates for {symbol} to calculate SMA({self.sma_period}) and EMA({self.ema_period})")
             
-            if current_sma is not None and current_ema is not None:
-                return {
-                    'sma': current_sma,
-                    'ema': current_ema,
-                    'timestamp': pd.Timestamp.now()
-                }
+            # Calculate date range - get enough data for SMA calculation
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=1)  # Get a day of data
+            
+            # Use list_aggs to get aggregates
+            aggs = []
+            count = 0
+            latest_timestamp = None
+            
+            for a in self.client.list_aggs(
+                symbol,
+                multiplier,  # 5-minute intervals
+                "minute",
+                int(start_date.timestamp() * 1000),
+                int(end_date.timestamp() * 1000),
+                adjusted="false",
+                sort="desc",  # Most recent first
+            ):
+                if count >= limit:
+                    break
+                aggs.append(a)
+                if not latest_timestamp:
+                    latest_timestamp = a.timestamp
+                count += 1
+            
+            if aggs:
+                self.logger.info(f"✅ Fetched {len(aggs)} aggregates for {symbol}")
+                
+                # Calculate SMA and EMA from the aggregates
+                current_sma = self.get_sma(aggs)
+                current_ema = self.get_ema(aggs)
+                
+                if current_sma is not None and current_ema is not None:
+                    if latest_timestamp:
+                        local_time = datetime.fromtimestamp(latest_timestamp/1000).strftime('%Y-%m-%d %H:%M:%S')
+                        self.logger.info(f"✅ Calculated SMA({self.sma_period}): ${current_sma:.4f}, EMA({self.ema_period}): ${current_ema:.4f}. Local time: {local_time}")
+                    else:
+                        self.logger.info(f"✅ Calculated SMA({self.sma_period}): ${current_sma:.4f}, EMA({self.ema_period}): ${current_ema:.4f}")
+                    
+                    return {
+                        'sma': current_sma,
+                        'ema': current_ema,
+                        'timestamp': pd.Timestamp.now()
+                    }
+                else:
+                    self.logger.warning(f"Failed to calculate indicators from aggregates for {symbol}")
+                    return None
             else:
-                self.logger.warning(f"Failed to get indicators from Polygon for {symbol}")
+                self.logger.warning(f"No aggregates retrieved for {symbol}")
                 return None
                 
         except Exception as e:

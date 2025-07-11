@@ -10,16 +10,10 @@ from threading import Thread
 
 # Import our trading bot and algorithms
 from bling_bot import BlingBot
-from sma_ema_crossover_algo import SmaEmaCrossoverAlgo
 from config_manager import ConfigManager
 
 # Timezone for NYSE
 nyse = pytz.timezone('America/New_York')
-
-# Algorithm registry for easy lookup
-ALGORITHMS = {
-    'sma_ema_crossover': SmaEmaCrossoverAlgo
-}
 
 def load_config(config_path='config.json'):
     """Load configuration from JSON file"""
