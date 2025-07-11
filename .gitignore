@@ -194,5 +194,5 @@ cython_debug/
 .cursorindexingignore
 
 # Configuration files
-config.json
+*.config.json
 .env

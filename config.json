@@ -1,0 +1,37 @@
+{
+  "global_settings": {
+    "check_interval": 60,
+    "paper_trading": true,
+    "log_level": "INFO",
+    "market_timezone": "America/New_York"
+  },
+  "bots": [
+    {
+      "id": 1,
+      "symbol": "SPY",
+      "algorithm": "sma_ema_crossover_agg",
+      "initial_value": 1000,
+      "current_value": 999.74,
+      "signal_timespan": "minute",
+      "signal_multiplier": 5,
+      "signal_days_back": 3,
+      "daily_pnl_threshold": -0.05,
+      "daily_gain_target": 0.1,
+      "description": "S&P 500 ETF with conservative 5-minute intervals"
+    },
+    {
+      "id": 2,
+      "symbol": "SPDN",
+      "algorithm": "sma_ema_crossover_agg",
+      "interval_minutes": 5,
+      "initial_value": 1000,
+      "current_value": 1000,
+      "signal_timespan": "minute",
+      "signal_multiplier": 5,
+      "signal_days_back": 3,
+      "daily_pnl_threshold": -0.05,
+      "daily_gain_target": 0.1,
+      "description": "Inverse S&P 500 ETF with conservative 5-minute intervals"
+    }
+  ]
+}
