@@ -1,8 +1,18 @@
+# Trading and Market Data
 alpaca-py
+polygon-api-client
+
+# Data Processing
 pandas
-schedule
 python-dateutil
 pytz
+
+# Scheduling and Utilities
+schedule
 holidays
+
+# Web Requests (if needed)
 requests
-polygon-api-client
+
+# Code Quality Tools (dev dependencies)
+autoflake
