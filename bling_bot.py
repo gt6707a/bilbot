@@ -49,8 +49,8 @@ class BlingBot:
             bot_id=bot_id,
             symbol=bot_config['symbol'],
             interval_minutes=bot_config.get('interval_minutes', 5),
-            initial_value=bot_config.get('initial_value', 1000),
-            paper=True,  # Always use paper trading for safety
+            initial_value=bot_config.get('initial_value', 10),
+            paper=bot_config.get('is_paper', True),  # Always use paper trading for safety
             algorithm=algorithm,
             signal_timespan=bot_config.get('signal_timespan', 'minute'),
             signal_multiplier=bot_config.get('signal_multiplier', 5),
